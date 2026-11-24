@@ -119,6 +119,13 @@ class HudCanvas(QWidget):
         self._base_scale = 1.0    # slow "breathing" target; amp is added per-frame
         self._base_halo  = 55.0
 
+        # SAM lite mode: paint every 4th/6th tick instead of every 2nd/3rd.
+        try:
+            from memory.config_manager import get_ui_lite
+            self._paint_div = (4, 6) if get_ui_lite() else (2, 3)
+        except Exception:
+            self._paint_div = (2, 3)
+
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._tmr.start(16)
@@ -386,11 +393,11 @@ class HudCanvas(QWidget):
         # characters forever and is indistinguishable here; idle drops to ~20 Hz
         # so a sleeping HUD stops pinning a CPU core. The visuals stay smooth
         # either way because the animation state keeps stepping at 60 Hz.
-        self._paint_tick = (self._paint_tick + 1) % 6
+        self._paint_tick = (self._paint_tick + 1) % 12
         active = (self.speaking or amp > 0.02
                   or self.state in ("THINKING", "PROCESSING"))
-        if _blinked or (self._paint_tick % 2 == 0 if active
-                        else self._paint_tick % 3 == 0):
+        if _blinked or (self._paint_tick % self._paint_div[0] == 0 if active
+                        else self._paint_tick % self._paint_div[1] == 0):
             # Nothing is on screen when the window is hidden or minimised, so
             # rendering the avatar into it is pure waste — and this app is meant
             # to sit running all day. The animation state above keeps stepping,

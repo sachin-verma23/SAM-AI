@@ -263,6 +263,14 @@ class JarvisUI:
     def set_state(self, state: str):
         self._win._state_sig.emit(state)
 
+    def set_status(self, **values) -> None:
+        """Thread-safe: update the footer status chips (ai, model, net,
+        camera, wake). Only the keys given change."""
+        try:
+            self._win._status_sig.emit(dict(values))
+        except Exception:
+            pass
+
     def write_log(self, text: str):
         self._win._log_sig.emit(text)
 

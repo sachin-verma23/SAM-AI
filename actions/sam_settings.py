@@ -82,6 +82,16 @@ def sam_settings(parameters: dict, player=None) -> str:
             return outcome.done("sam_settings", mode=mode,
                                 note="saved; the conversation restarts in a moment")
 
+        if action == "set_lite":
+            raw = str(parameters.get("value") or "").strip().lower()
+            if raw not in ("on", "off", "true", "false", "1", "0"):
+                return outcome.ask("sam_settings", "lite mode on or off")
+            from memory.config_manager import save_ui_lite
+            on = raw in ("on", "true", "1")
+            save_ui_lite(on)
+            return outcome.done("sam_settings", lite_mode="on" if on else "off",
+                                note="applies the next time SAM starts")
+
         return outcome.failed("sam_settings", f"unknown action '{action}'")
     except Exception as e:
         return outcome.failed("sam_settings", f"could not change the setting: {e}")
@@ -96,6 +106,7 @@ TOOL = {
         "action='set_mode' with value auto | online | offline when the user asks to use "
         "the local/offline AI, Gemini/online only, or to switch automatically "
         "('offline mode on karo', 'auto mode'). "
+        "action='set_lite' with value on | off for the lighter, lower-CPU display. "
         "action='get' to report the current settings. Before set_language or set_mode, "
         "say one short sentence that you are switching, because the conversation "
         "restarts right after."
@@ -103,7 +114,7 @@ TOOL = {
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "action": {"type": "STRING", "description": "set_language | set_mode | get"},
+            "action": {"type": "STRING", "description": "set_language | set_mode | set_lite | get"},
             "value": {"type": "STRING",
                       "description": "set_language: auto | hindi | english | hinglish. "
                                      "set_mode: auto | online | offline"},

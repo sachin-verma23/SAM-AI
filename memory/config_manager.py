@@ -346,6 +346,16 @@ def save_brief_enabled(enabled: bool) -> None:
 
 # ── SAM additions ────────────────────────────────────────────────────────────
 
+def get_ui_lite() -> bool:
+    """Lite HUD: repaint the animated centre at half rate (15/10 Hz instead of
+    30/20 Hz) to save CPU on a slow laptop. Applies at the next launch."""
+    return bool(load_api_keys().get("ui_lite", False))
+
+
+def save_ui_lite(enabled: bool) -> None:
+    _patch_config(ui_lite=bool(enabled))
+
+
 def get_gestures_enabled() -> bool:
     """Hand-gesture control through the webcam. OFF by default."""
     return bool(load_api_keys().get("gestures_enabled", False))

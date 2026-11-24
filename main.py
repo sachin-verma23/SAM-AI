@@ -2871,6 +2871,35 @@ class JarvisLive:
             print(f"[SAM] Pipeline engine unavailable: {e}")
             return None
 
+    async def _push_status(self) -> None:
+        """SAM: keep the footer chips true — engine, internet, camera, wake."""
+        model = ""
+        if self._engine_caps is not None:
+            try:
+                from memory.config_manager import get_pipeline, get_provider_config
+                model = get_provider_config(get_pipeline().get("llm", "")).get("model", "")
+            except Exception:
+                pass
+        while True:
+            try:
+                from core import connectivity, gestures
+                online = await asyncio.to_thread(connectivity.is_online, 30.0)
+                ctl = gestures.controller()
+                if self._wake_enabled:
+                    wake = (wake_phrase().lower() if not self._awake else "awake")
+                else:
+                    wake = "off"
+                self.ui.set_status(
+                    ai="offline" if self._engine_caps is not None else "online",
+                    model=(model or "local").split(":")[0],
+                    net=online,
+                    camera=(ctl.status if ctl.running() else "off"),
+                    wake=wake,
+                )
+            except Exception as e:
+                print(f"[Status] {e}")
+            await asyncio.sleep(5)
+
     def _auto_wants_local(self) -> tuple[bool, str]:
         """Auto mode: should this connect use the local pipeline? (yes?, why)"""
         try:
@@ -3152,6 +3181,7 @@ class JarvisLive:
                         tg.create_task(self._run_background_monitor())
                         tg.create_task(self._run_proactive_mode())
                     tg.create_task(self._run_sleep_watch())
+                    tg.create_task(self._push_status())
                     if self._engine_mode() == "auto":
                         tg.create_task(self._watch_connectivity())
                     if self._dashboard:

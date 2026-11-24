@@ -113,6 +113,7 @@ def _window_title(display: str) -> str:
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
     _gesture_sig    = pyqtSignal()        # SAM: repaint the gesture button
+    _status_sig     = pyqtSignal(dict)    # SAM: live status for the footer chips
     _state_sig      = pyqtSignal(str)
     _content_sig    = pyqtSignal(str, str)   # (title, text) — thread-safe content display
     _codejob_sig    = pyqtSignal(object)     # dev_agent job state — live coding panel
@@ -412,6 +413,7 @@ class MainWindow(QMainWindow):
 
         self._log_sig.connect(self._log.append_log)
         self._gesture_sig.connect(self._refresh_gesture_btn)
+        self._status_sig.connect(self._on_live_status)
         self._state_sig.connect(self._apply_state)
         self._content_sig.connect(self._show_content)
         self._codejob_sig.connect(self._show_code_job)
@@ -1327,7 +1329,8 @@ class MainWindow(QMainWindow):
         try:
             from memory.config_manager import get_provider_mode, get_voice
             mode = str(get_provider_mode() or "gemini")
-            engine = "GEMINI LIVE" if mode == "gemini" else f"LOCAL {mode.upper()}"
+            engine = {"gemini": "GEMINI LIVE", "auto": "AUTO · ONLINE/OFFLINE"}.get(
+                mode, f"LOCAL {mode.upper()}")
             voice = str(get_voice() or "--").upper()
         except Exception:
             engine, voice = "GEMINI LIVE", "--"
@@ -1337,15 +1340,36 @@ class MainWindow(QMainWindow):
             self._row_voice.set_value(voice)
         self._refresh_status_strip()
 
+    def _on_live_status(self, values: dict) -> None:
+        """SAM: status pushed from the conversation thread (engine, network,
+        camera, wake word). Merged, so each sender only says what it knows."""
+        cur = dict(getattr(self, "_live_status", {}) or {})
+        cur.update(values or {})
+        self._live_status = cur
+        self._refresh_status_strip()
+
     def _refresh_status_strip(self) -> None:
         if not hasattr(self, "_status_strip"):
             return
-        mic = ("MIC · MUTED", "MUTED_C") if self._muted else ("MIC · LIVE", "GREEN")
-        self._status_strip.set_items([
-            (f"ENGINE · {getattr(self, '_engine_label', 'GEMINI LIVE')}", "GREEN"),
-            mic,
-            (f"PROTOCOL · {APP_PROTOCOL}", "PRI"),
-        ])
+        st = getattr(self, "_live_status", {}) or {}
+        items = []
+        ai = st.get("ai")
+        if ai == "offline":
+            items.append((f"AI · OFFLINE · {str(st.get('model', 'LOCAL')).upper()}", "ACC"))
+        elif ai == "online":
+            items.append(("AI · ONLINE · GEMINI", "GREEN"))
+        else:
+            items.append((f"ENGINE · {getattr(self, '_engine_label', 'GEMINI LIVE')}", "GREEN"))
+        if "net" in st:
+            items.append(("NET · ONLINE", "GREEN") if st["net"] else ("NET · OFFLINE", "RED"))
+        items.append(("MIC · MUTED", "MUTED_C") if self._muted else ("MIC · LIVE", "GREEN"))
+        cam = st.get("camera")
+        if cam:
+            items.append((f"CAM · {str(cam).upper()}", "GREEN" if cam == "watching" else "TEXT_DIM"))
+        wake = st.get("wake")
+        if wake:
+            items.append((f"WAKE · {str(wake).upper()}", "PRI"))
+        self._status_strip.set_items(items)
 
     def _build_left_panel(self) -> QWidget:
         w = QWidget()
@@ -2290,7 +2314,7 @@ class MainWindow(QMainWindow):
     def _build_footer(self) -> QWidget:
         self._status_strip = StatusStrip()
         self._status_strip.set_right(
-            "F4 MUTE   ·   F11 FULLSCREEN   ·   ESC INTERRUPT   ·   BY FATIHMAKES")
+            "F4 MUTE   ·   F11 FULLSCREEN   ·   ESC INTERRUPT   ·   SAM · SACHIN VERMA")
         self._refresh_status_strip()
         return self._status_strip
 
