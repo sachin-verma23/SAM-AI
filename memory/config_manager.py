@@ -346,6 +346,15 @@ def save_brief_enabled(enabled: bool) -> None:
 
 # ── SAM additions ────────────────────────────────────────────────────────────
 
+def get_gestures_enabled() -> bool:
+    """Hand-gesture control through the webcam. OFF by default."""
+    return bool(load_api_keys().get("gestures_enabled", False))
+
+
+def save_gestures_enabled(enabled: bool) -> None:
+    _patch_config(gestures_enabled=bool(enabled))
+
+
 def get_dashboard_enabled() -> bool:
     """Start the phone dashboard at launch? OFF by default.
 

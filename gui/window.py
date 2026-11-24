@@ -112,6 +112,7 @@ def _window_title(display: str) -> str:
 
 class MainWindow(QMainWindow):
     _log_sig        = pyqtSignal(str)
+    _gesture_sig    = pyqtSignal()        # SAM: repaint the gesture button
     _state_sig      = pyqtSignal(str)
     _content_sig    = pyqtSignal(str, str)   # (title, text) — thread-safe content display
     _codejob_sig    = pyqtSignal(object)     # dev_agent job state — live coding panel
@@ -410,6 +411,7 @@ class MainWindow(QMainWindow):
         self._update_metrics()
 
         self._log_sig.connect(self._log.append_log)
+        self._gesture_sig.connect(self._refresh_gesture_btn)
         self._state_sig.connect(self._apply_state)
         self._content_sig.connect(self._show_content)
         self._codejob_sig.connect(self._show_code_job)
@@ -1716,6 +1718,10 @@ class MainWindow(QMainWindow):
         self._ptt_btn.clicked.connect(self._toggle_ptt)
         self._refresh_talk_btns()
 
+        self._gesture_btn = _row(QPushButton())
+        self._gesture_btn.clicked.connect(self._toggle_gestures)
+        self._refresh_gesture_btn()
+
         self._hud_btn = _row(QPushButton())
         self._hud_btn.clicked.connect(self._toggle_hud_style)
         self._refresh_hud_btn()
@@ -2557,6 +2563,34 @@ class MainWindow(QMainWindow):
         self._log.append_log(
             "SYS: HUD switched to the animated face." if want == "face"
             else "SYS: HUD switched to the reactor core.")
+
+    def _refresh_gesture_btn(self):
+        """SAM: repaint the hand-gesture row from the saved setting."""
+        if not hasattr(self, "_gesture_btn"):
+            return
+        from memory.config_manager import get_gestures_enabled
+        on = get_gestures_enabled()
+        self._gesture_btn.setText("✋  GESTURES: ON" if on else "✋  GESTURES: OFF")
+        self._gesture_btn.setStyleSheet(btn_css("on" if on else "off"))
+        self._gesture_btn.setToolTip(
+            "Webcam hand gestures: ✋ play/pause · ✊ mute · 👍/👎 volume · "
+            "✌️ next · ☝️ previous · 🤟 wake SAM · swipe ←/→ back/forward")
+
+    def _toggle_gestures(self):
+        from memory.config_manager import get_gestures_enabled
+        want = not get_gestures_enabled()
+        cb = getattr(self, "on_gesture_toggle", None)
+        if cb is None:
+            self._log.append_log("SYS: Gesture control is not ready yet.")
+            return
+        # Starting opens the camera and loads a model: never on the Qt thread.
+        def work():
+            try:
+                cb(want)
+            except Exception as e:
+                self._log_sig.emit(f"ERR: Gesture control — {e}")
+            self._gesture_sig.emit()
+        threading.Thread(target=work, daemon=True, name="gesture-toggle").start()
 
     def _toggle_ptt(self):
         from memory.config_manager import (get_push_to_talk_enabled,

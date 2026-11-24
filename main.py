@@ -866,6 +866,14 @@ class JarvisLive:
                 self.set_push_to_talk(True)
             except Exception as e:
                 print(f"[SAM] ⚠ Push-to-talk unavailable: {e}")
+        # ── Hand gestures (core/gestures.py) — off unless switched on ─────────
+        self.ui.on_gesture_toggle = self.set_gestures
+        try:
+            from memory.config_manager import get_gestures_enabled
+            if get_gestures_enabled():
+                self.set_gestures(True)
+        except Exception as e:
+            print(f"[Gestures] {e}")
         # UI control surface for the Wake Word settings section.
         self.ui.wake_is_ready    = wake_is_ready          # () -> bool
         self.ui.wake_get_state   = self._wake_state       # () -> dict
@@ -874,6 +882,47 @@ class JarvisLive:
         self.ui.on_wake_install  = self._ui_wake_install  # () -> (ok, msg)
 
     # ── Wake word: state machine ─────────────────────────────────────────────
+
+    def set_gestures(self, enabled: bool) -> str:
+        """Turn hand-gesture control on or off. Returns a short status."""
+        from core import gestures
+        from memory.config_manager import save_gestures_enabled
+        ctl = gestures.controller()
+        ctl.log = self.ui.write_log
+        ctl.on_wake = lambda: self.wake(reason="gesture")
+        if not enabled:
+            ctl.stop()
+            save_gestures_enabled(False)
+            self.ui.write_log("SYS: Gesture control off.")
+            return "off"
+        problem = gestures.missing()
+        if problem:
+            save_gestures_enabled(False)
+            self.ui.write_log(f"SYS: Gesture control unavailable — {problem}.")
+            return problem
+        save_gestures_enabled(True)
+        ctl.start()
+        return "on"
+
+    @staticmethod
+    def _gestures_release_camera() -> None:
+        """SAM is about to use the webcam: gestures let go of it first."""
+        try:
+            from core import gestures
+            ctl = gestures.controller()
+            if ctl.running():
+                ctl.pause()
+                time.sleep(0.6)          # the gesture thread releases within ~0.3 s
+        except Exception:
+            pass
+
+    @staticmethod
+    def _gestures_take_camera_back() -> None:
+        try:
+            from core import gestures
+            gestures.controller().resume()
+        except Exception:
+            pass
 
     def _wake_state(self) -> dict:
         # A loaded, running detector is definitively ready; otherwise fall back
@@ -1790,6 +1839,7 @@ class JarvisLive:
                     angle     = args.get("angle", "screen").lower()
                     user_text = args.get("text", "What do you see?")
                     if angle == "camera":
+                        await loop.run_in_executor(None, self._gestures_release_camera)
                         img_b, mime_t = await loop.run_in_executor(None, _capture_camera)
                         self.ui.start_camera_stream()
                         self._vision_cam_active = True
@@ -1814,6 +1864,7 @@ class JarvisLive:
 
             elif name == "close_camera":
                 self.ui.stop_camera_stream()
+                self._gestures_take_camera_back()
                 result = "Camera closed."
 
             elif name == "system_status":
@@ -2236,6 +2287,8 @@ class JarvisLive:
                                 async def _cam_close():
                                     await asyncio.sleep(2.0)
                                     self.ui.stop_camera_stream()
+                                    await asyncio.sleep(1.0)
+                                    self._gestures_take_camera_back()
                                 self._keep_task(asyncio.create_task(_cam_close()))
 
                     if response.tool_call:

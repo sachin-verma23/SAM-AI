@@ -233,6 +233,14 @@ class JarvisUI:
         self._win.ptt_hold = cb
 
     @property
+    def on_gesture_toggle(self):
+        return getattr(self._win, "on_gesture_toggle", None)
+
+    @on_gesture_toggle.setter
+    def on_gesture_toggle(self, cb):
+        self._win.on_gesture_toggle = cb
+
+    @property
     def on_push_to_talk(self):
         return self._win.on_push_to_talk
 

@@ -384,6 +384,50 @@ def test_wake_word_hey_sam() -> None:
         print("  SKIP  Vosk model not downloaded")
 
 
+# ── Phase 8 ──────────────────────────────────────────────────────────────────
+
+def test_gestures() -> None:
+    section("Hand gestures")
+    from core import gestures as g
+    L = g.GestureLogic()
+    fired = []
+    t = 0.0
+    def run(gesture, seconds, score=0.9, wrist=None):
+        nonlocal t
+        end = t + seconds
+        while t < end:
+            f = L.feed(t, gesture, score, wrist)
+            if f:
+                fired.append(f)
+            t += 0.125                         # 8 frames per second
+    run("Open_Palm", 0.3)
+    check(fired == [], "a pose seen briefly does nothing")
+    run("Open_Palm", 1.5)
+    check(fired == ["Open_Palm"], "a steady open palm fires once, not repeatedly")
+    run(None, 0.5); fired.clear()
+    run("Thumb_Up", 3.0)
+    check(2 <= fired.count("Thumb_Up") <= 4, f"thumbs up repeats while held ({len(fired)})")
+    run(None, 0.5); fired.clear()
+    run("Victory", 2.0, score=0.4)
+    check(fired == [], "a low-confidence pose is ignored")
+    run(None, 2.0); fired.clear()
+    for i in range(5):
+        f = L.feed(t, None, 0.0, 0.2 + i * 0.12); t += 0.1
+        if f: fired.append(f)
+    check(fired == ["swipe_right"], "a fast hand movement to the right is a swipe")
+    L2 = g.GestureLogic({"Open_Palm": ""})
+    out = [L2.feed(i * 0.125, "Open_Palm", 0.9, None) for i in range(20)]
+    check(not any(out), "a gesture mapped to '' is disabled")
+    check(set(g.DEFAULT_ACTIONS.values()) & {"shutdown_computer", "delete"} == set(),
+          "no destructive action is mapped")
+    with _TempConfig() as cm:
+        check(cm.get_gestures_enabled() is False, "gesture control is off by default")
+    from actions.gesture_control import gesture_control
+    out = gesture_control({"action": "status"})
+    check("status=done" in out and "palm" in out, "the voice tool reports status and the gestures")
+    print("  INFO  ", g.missing() or "mediapipe, OpenCV and the model are all present")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -396,6 +440,7 @@ TESTS = [
     test_offline_engine_is_light,
     test_memory_edit_and_history,
     test_wake_word_hey_sam,
+    test_gestures,
 ]
 
 
