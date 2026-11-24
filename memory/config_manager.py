@@ -358,6 +358,25 @@ def save_dashboard_enabled(enabled: bool) -> None:
     _patch_config(dashboard_enabled=bool(enabled))
 
 
+# How SAM chooses the language of its replies.
+#   auto      the language of the user's latest message (Hindi, English or Hinglish)
+#   hindi     always Hindi        english   always English
+#   hinglish  always Hinglish — Hindi sentences with everyday English words
+LANGUAGE_MODES = ("auto", "hindi", "english", "hinglish")
+
+
+def get_preferred_language() -> str:
+    v = str(load_api_keys().get("preferred_language", "auto")).strip().lower()
+    return v if v in LANGUAGE_MODES else "auto"
+
+
+def save_preferred_language(mode: str) -> None:
+    mode = str(mode or "").strip().lower()
+    if mode not in LANGUAGE_MODES:
+        raise ValueError(f"language must be one of {', '.join(LANGUAGE_MODES)}")
+    _patch_config(preferred_language=mode)
+
+
 # ── Audio devices ────────────────────────────────────────────────────────────
 # Stored as device NAMES, not sounddevice indices. Indices shift every time a
 # USB device is plugged in or removed, so a saved index silently starts pointing

@@ -134,12 +134,65 @@ def test_rebrand() -> None:
     check(MainWindow._subtitle("SAM").endswith("Sachin Verma"), "header subtitle names the owner")
 
 
+# ── Phase 2 ──────────────────────────────────────────────────────────────────
+
+class _TempConfig:
+    """Point config_manager at a throwaway api_keys.json for one test."""
+
+    def __enter__(self):
+        from memory import config_manager as cm
+        self.cm, self.real = cm, cm.CONFIG_FILE
+        self.td = tempfile.TemporaryDirectory()
+        cm.CONFIG_FILE = Path(self.td.name) / "api_keys.json"
+        return cm
+
+    def __exit__(self, *exc):
+        self.cm.CONFIG_FILE = self.real
+        self.td.cleanup()
+
+
+def test_language_preference() -> None:
+    section("Hindi / English / Hinglish preference")
+    import main
+    with _TempConfig() as cm:
+        check(cm.get_preferred_language() == "auto", "default is auto (match the user)")
+        block = main._language_block()
+        check("MOST RECENT" in block and "Hinglish" in block, "auto mode mirrors the user, Hinglish included")
+        cm.save_preferred_language("hinglish")
+        check("Always reply in natural Hinglish" in main._language_block(), "hinglish mode is enforced")
+        cm.save_preferred_language("hindi")
+        check("everyday spoken Hindi" in main._language_block(), "hindi mode is enforced")
+        try:
+            cm.save_preferred_language("french")
+            check(False, "an unknown language is refused")
+        except ValueError:
+            check(True, "an unknown language is refused")
+
+        from actions.sam_settings import sam_settings
+
+        class P:
+            calls = []
+            def request_reconnect(self, reason="", fresh=False):
+                self.calls.append((reason, fresh))
+        p = P()
+        out = sam_settings({"action": "set_language", "value": "Hinglish"}, player=p)
+        check("status=done" in out and cm.get_preferred_language() == "hinglish",
+              "the voice tool saves the language")
+        check(p.calls == [("new language", True)], "and restarts the session fresh to apply it")
+        out = sam_settings({"action": "set_language", "value": "klingon"}, player=p)
+        check("status=ask" in out, "an unclear language makes the tool ask, not guess")
+    prompt = (ROOT / "core" / "prompt.txt").read_text(encoding="utf-8")
+    check("HINGLISH is the exception" in prompt, "the base prompt allows Hinglish")
+    check('"aap"' in prompt, "the base prompt uses the respectful 'aap'")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
     test_dashboard_off_by_default,
     test_error_classification,
     test_rebrand,
+    test_language_preference,
 ]
 
 

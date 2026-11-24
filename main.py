@@ -321,6 +321,47 @@ def _describe_limits(has_vision: bool, has_mic: bool) -> str:
     return "\n".join(out)
 
 
+# What each preferred_language setting tells the model. Hinglish is treated as
+# a language of its own — the everyday Hindi-English mix spoken in India —
+# because the base prompt's "never mix two languages" rule would otherwise
+# forbid exactly how the owner talks.
+_LANGUAGE_RULES = {
+    "auto": (
+        "Reply in the language of the user's MOST RECENT message. Hindi gets "
+        "Hindi, English gets English, and Hinglish (Hindi and English mixed in "
+        "one sentence, as people speak in India) gets natural Hinglish, mixed "
+        "the same way they mix it."),
+    "hindi": (
+        "Always reply in simple, everyday spoken Hindi, even when the user speaks "
+        "English, unless they ask for another language. Keep common technical "
+        "words in English the way Indians say them (file, folder, volume, WiFi). "
+        "Address the user as 'aap' (kijiye, kar dijiye), never 'tum' or 'tu'."),
+    "english": (
+        "Always reply in clear, simple English, even when the user speaks Hindi "
+        "or Hinglish, unless they ask for another language."),
+    "hinglish": (
+        "Always reply in natural Hinglish: Hindi sentence structure with English "
+        "words where Indians normally use them, for example 'Volume 50 percent "
+        "kar diya hai.' or 'File Desktop par save ho gayi.' Do this even when "
+        "the user speaks pure Hindi or pure English, unless they ask otherwise. "
+        "Address the user as 'aap', never 'tum' or 'tu'."),
+}
+
+
+def _language_block() -> str:
+    """The [LANGUAGE PREFERENCE] block for the system prompt. It overrides the
+    generic [LANGUAGE] section of prompt.txt where the two differ."""
+    try:
+        from memory.config_manager import get_preferred_language
+        mode = get_preferred_language()
+    except Exception:
+        mode = "auto"
+    return ("[LANGUAGE PREFERENCE — set by the owner, overrides [LANGUAGE] below]\n"
+            f"{_LANGUAGE_RULES.get(mode, _LANGUAGE_RULES['auto'])}\n"
+            "Hinglish counts as ONE language, so mixing Hindi and English inside a "
+            "Hinglish reply is correct, not a violation of the no-mixing rule.\n\n")
+
+
 def _render_prompt(template: str, values: dict) -> str:
     """Fill {tokens} in the prompt template.
 
@@ -718,6 +759,12 @@ class JarvisLive:
         self.ui.get_plugins = self._plugin_registry.list_for_ui
         self.ui.get_plugin_settings = self._plugin_registry.settings_schemas  # ⚙ settings tab
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
+        # Tools that change something baked in at connect time (the language
+        # rule, the engine) ask for a rebuild. fresh=True starts a clean
+        # conversation so the server cannot restore the old instructions.
+        self.ui.request_reconnect = (
+            lambda reason="settings", fresh=False:
+            self.request_reconnect(keep_context=not fresh, reason=reason))
 
         # Tool access for plugins that ORCHESTRATE other tools rather than doing
         # a job themselves — screen_agent is the first, and the reason this
@@ -1467,6 +1514,7 @@ class JarvisLive:
             f"Always refer to yourself as {self._asst_name}.\n"
             f"{_addr}\n\n"
         )
+        identity_ctx += _language_block()
 
         # Everything the model is told about *itself* is derived here, not
         # written into prompt.txt: the name comes from config, the platform from

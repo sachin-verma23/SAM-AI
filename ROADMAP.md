@@ -10,7 +10,7 @@ Approved by Sachin Verma on 2026-11-24. Base: MARK LVII. Every phase is tested (
 |---|---|---|
 | 0 | Safety: atomic memory writes, dashboard off by default, error-classification fixes, quiet routine defaults | ✅ Done |
 | 1 | Rebrand to SAM, owner Sachin Verma | ✅ Done |
-| 2 | Hindi / English / Hinglish behaviour | ⏳ |
+| 2 | Hindi / English / Hinglish behaviour | ✅ Done |
 | 3 | Offline stack: Ollama + llama3.2:3b, Whisper small, Piper hi/en | ⏳ |
 | 4 | Automatic online/offline switching | ⏳ |
 | 5 | Confirmation before sensitive actions | ⏳ |
