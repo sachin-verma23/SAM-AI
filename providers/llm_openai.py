@@ -390,10 +390,15 @@ class OpenAICompatLLM:
             max_tools = int(_LOCAL_BUDGET["max_tools"])
             max_chars = int(_LOCAL_BUDGET["max_tool_chars"])
 
+        # SAM: "tool_format": "prompt" puts the tools in the system prompt (which
+        # Ollama caches) instead of the native tool API. llama3.2's template
+        # re-sends native tools inside every user turn, which on a laptop CPU
+        # cost ~100 s per reply.
+        fmt = str(cfg.get("tool_format") or "openai").strip().lower()
         self.caps = dict(DEFAULT_CAPS)
         self.caps.update({
             "tools": bool(cfg.get("tools", True)),
-            "tool_format": "openai",
+            "tool_format": fmt if fmt in ("openai", "prompt") else "openai",
             "vision": bool(cfg.get("vision", False)),
             "max_tools": max_tools,
             "max_tool_chars": max_chars,

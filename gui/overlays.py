@@ -1231,6 +1231,21 @@ class MemoryOverlay(_HudOverlay):
                 """)
                 rm.clicked.connect(
                     lambda _=False, c=r["category"], k=r["key"]: self._forget(c, k))
+
+                ed = QPushButton("✎")
+                ed.setFixedSize(20, 20)
+                ed.setFont(hud_font(8, QFont.Weight.Bold))
+                ed.setCursor(Qt.CursorShape.PointingHandCursor)
+                ed.setToolTip("Edit this")
+                ed.setStyleSheet(f"""
+                    QPushButton {{ background: transparent; color: {C.TEXT_DIM};
+                        border: 1px solid {C.BORDER}; border-radius: 3px; }}
+                    QPushButton:hover {{ color: {C.PRI}; border-color: {C.PRI}; }}
+                """)
+                ed.clicked.connect(
+                    lambda _=False, c=r["category"], k=r["key"], v=r["value"]:
+                    self._edit(c, k, v))
+                line.addWidget(ed)
                 line.addWidget(rm)
 
                 holder = QWidget()
@@ -1240,6 +1255,18 @@ class MemoryOverlay(_HudOverlay):
             ilay.addStretch()
             scroll.setWidget(inner)
             self._lay.addWidget(scroll)
+
+        add = QPushButton("+ ADD A FACT")
+        add.setFixedHeight(26)
+        add.setFont(hud_font(8))
+        add.setCursor(Qt.CursorShape.PointingHandCursor)
+        add.setStyleSheet(f"""
+            QPushButton {{ background: transparent; color: {C.PRI};
+                border: 1px solid {C.PRI_DIM}; border-radius: 3px; }}
+            QPushButton:hover {{ border-color: {C.PRI}; }}
+        """)
+        add.clicked.connect(self._add)
+        self._lay.addWidget(add)
 
         close = QPushButton("CLOSE")
         close.setFixedHeight(30)
@@ -1258,6 +1285,35 @@ class MemoryOverlay(_HudOverlay):
         # hint is not final until then. Harmless when the first pass already
         # got it right: _settle is idempotent.
         QTimer.singleShot(0, lambda g=before: self._settle(g))
+
+    def _ask_text(self, title: str, label: str, text: str = "") -> str | None:
+        """A small modal text prompt on the Qt thread. None when cancelled."""
+        from PyQt6.QtWidgets import QInputDialog
+        val, ok = QInputDialog.getText(self, title, label, QLineEdit.EchoMode.Normal, text)
+        return val if ok else None
+
+    def _edit(self, category: str, key: str, value: str):
+        """SAM: change a stored fact's value (and optionally its name)."""
+        new_val = self._ask_text("Edit memory", f"{key.replace('_', ' ')}:", value)
+        if new_val is None or new_val.strip() == value:
+            return
+        from memory.memory_manager import edit_entry
+        edit_entry(category, key, new_val)
+        QTimer.singleShot(0, self._rebuild)
+
+    def _add(self):
+        """SAM: add a fact by hand — 'category: key = value' or just 'key = value'."""
+        raw = self._ask_text("Add memory",
+                             "key = value   (optionally  category: key = value)\n"
+                             "categories: identity, preferences, projects, "
+                             "relationships, wishes, notes")
+        if not raw or "=" not in raw:
+            return
+        left, value = raw.split("=", 1)
+        category, _, key = left.rpartition(":")
+        from memory.memory_manager import edit_entry
+        edit_entry((category or "notes").strip() or "notes", key.strip(), value.strip())
+        QTimer.singleShot(0, self._rebuild)
 
     def _forget(self, category: str, key: str):
         from memory.memory_manager import forget

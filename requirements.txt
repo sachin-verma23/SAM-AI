@@ -44,7 +44,8 @@ pyperclip
 
 # ── Vision & media ────────────────────────────────────────────────────────────
 pillow>=10,<13
-opencv-python>=4.8,<5
+opencv-contrib-python>=4.8      # superset of opencv-python; mediapipe needs it
+mediapipe>=0.10              # SAM hand-gesture control (core/gestures)
 mss>=9,<11
 
 # ── System, files & documents ─────────────────────────────────────────────────
@@ -131,10 +132,10 @@ pynvml                       # system_monitor + the HUD's GPU meter (NVIDIA)
 # only ever uses Gemini should not pay for them. Deleting providers/ removes
 # the whole feature and the app runs exactly as it did before it existed.
 
-# ── Optional: local wake word ("Hey Jarvis") ──────────────────────────────────
-# Deliberately NOT installed by default — it's opt-in. Enable it (and download
-# the tiny model) with one click from ⚙ → WAKE WORD in the app, or install it
-# yourself with:  pip install openwakeword
+# ── Optional: local wake word ("Hey Sam") ─────────────────────────────────────
+# Deliberately NOT installed by default — it is opt-in. Enable it (and download
+# the 36 MB model) with one click from ⚙ → WAKE WORD in the app, or install it
+# yourself with:  pip install vosk     (the old "Hey Jarvis": pip install openwakeword)
 #
 # macOS / Linux OS actions (volume, brightness, reminders) shell out to native
 # tools (pactl / brightnessctl / osascript / systemd), so no extra Python

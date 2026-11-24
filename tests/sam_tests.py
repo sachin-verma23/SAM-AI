@@ -288,6 +288,102 @@ def test_confirmation_policy() -> None:
         confirm.bind(None, None, None, None)
 
 
+# ── Phase 3 ──────────────────────────────────────────────────────────────────
+
+def test_offline_engine_is_light() -> None:
+    section("Offline engine: short prompt, short tool list")
+    import main
+    from core import offline_tools
+    from providers import schema
+    local = main._load_local_prompt()
+    check(local and len(local) < 2000, f"local prompt is short ({len(local)} chars)")
+    check("#" not in local.splitlines()[0], "comment lines are removed")
+    full = main._load_system_prompt()
+    check(len(full) > 3 * len(local), "it is much shorter than the online prompt")
+    decls = main.TOOL_DECLARATIONS + [{"name": "computer_settings"}, {"name": "open_app"},
+                                      {"name": "web_search"}]
+    slim = offline_tools.slim_declarations(decls)
+    names = [d["name"] for d in slim]
+    check("web_search" not in names, "online-only tools are not in the offline list")
+    check(names[:2] == ["computer_settings", "open_app"], "PC control comes first")
+    check("shutdown_jarvis" in names and "save_memory" in names, "memory and shutdown are kept")
+    check(schema.payload_size(offline_tools.SLIM) < 4500,
+          f"the whole offline tool list is small ({schema.payload_size(offline_tools.SLIM)} chars)")
+    from providers.llm_openai import OpenAICompatLLM
+    llm = OpenAICompatLLM({"base_url": "http://127.0.0.1:11434/v1", "model": "m",
+                           "tool_format": "prompt"})
+    check(llm.caps["tool_format"] == "prompt", "tool_format=prompt is honoured")
+    check(main._ONLINE_ONLY_TOOLS >= {"web_search", "browser_control"},
+          "web tools are withheld while offline")
+
+
+# ── Phase 6 ──────────────────────────────────────────────────────────────────
+
+def test_memory_edit_and_history() -> None:
+    section("Memory can be edited; conversations are kept and searchable")
+    from memory import memory_manager as mm, history
+    real_mem, real_hist = mm.MEMORY_PATH, history.HISTORY_DIR
+    with tempfile.TemporaryDirectory() as td:
+        mm.MEMORY_PATH = Path(td) / "long_term.json"
+        history.HISTORY_DIR = Path(td) / "history"
+        try:
+            mm.update_memory({"preferences": {"food": {"value": "paneer"}}})
+            mm.edit_entry("preferences", "food", "dal makhani")
+            check(mm.load_memory()["preferences"]["food"]["value"] == "dal makhani",
+                  "a value can be edited")
+            mm.edit_entry("preferences", "food", "dal makhani", new_category="notes",
+                          new_key="Favourite Dish")
+            m = mm.load_memory()
+            check("food" not in m["preferences"] and m["notes"]["favourite_dish"]["value"] == "dal makhani",
+                  "a fact can be renamed / moved, the old one is removed")
+            check(mm.edit_entry("notes", "x", "  ").startswith("Nothing"), "an empty value is refused")
+
+            history.append("user", "Desktop par ek naya folder Projects2026 bana do")
+            history.append("assistant", "Folder Projects2026 bana diya.")
+            history.append("user", "Volume 30 percent kar do")
+            hits = history.search("Projects2026 folder")
+            check(hits and "Projects2026" in hits[0]["text"], "search finds an earlier turn")
+            check(len(history.recent(days=1)) == 3, "recent() returns today's turns")
+            from actions.conversation_history import conversation_history
+            out = conversation_history({"action": "search", "query": "volume"})
+            check("status=done" in out and "Volume 30" in out, "the tool returns the match")
+            check("UNTRUSTED" in out, "history reaches the model marked as data")
+        finally:
+            mm.MEMORY_PATH, history.HISTORY_DIR = real_mem, real_hist
+
+
+# ── Phase 7 ──────────────────────────────────────────────────────────────────
+
+def test_wake_word_hey_sam() -> None:
+    section("Wake word 'Hey Sam'")
+    from core import wake_word, wake_sam
+    with _TempConfig() as cm:
+        check(wake_word.wake_engine() == "sam", "Hey Sam is the default engine")
+        check(wake_word.wake_phrase() == "Hey Sam", "hints say 'Hey Sam'")
+        cm.update_config(wake_engine="jarvis")
+        check(wake_word.wake_phrase() == "Hey Jarvis", "the old engine can still be chosen")
+        cm.update_config(wake_engine="sam", wake_threshold=0.9)
+        check(abs(wake_word._sam_threshold() - 0.9) < 1e-9, "the threshold is configurable")
+
+    def res(*pairs):
+        return {"result": [{"word": w, "conf": c} for w, c in pairs]}
+    T = wake_sam.DEFAULT_THRESHOLD
+    check(wake_sam.wake_in(res(("hey", 1.0), ("sam", 0.95)), T), "'hey sam' wakes it")
+    check(wake_sam.wake_in(res(("hi", 0.9), ("sam", 0.9), ("[unk]", 1)), T), "'hi sam ...' wakes it")
+    check(not wake_sam.wake_in(res(("sam", 1.0)), T), "a lone 'sam' does not")
+    check(not wake_sam.wake_in(res(("hey", 1.0), ("[unk]", 1.0)), T), "'hey' + something else does not")
+    check(not wake_sam.wake_in(res(("hey", 0.5), ("sam", 0.6)), T), "a low-confidence match does not")
+    check(not wake_sam.wake_in(res(("sam", 1.0), ("hey", 1.0)), T), "the words must be in order")
+
+    if wake_sam.is_ready():
+        hits = []
+        det = wake_sam.SamWakeDetector(lambda: hits.append(1), logger=lambda m: None)
+        check(det.start() and det.ready, "the Vosk model loads")
+        det.stop()
+    else:
+        print("  SKIP  Vosk model not downloaded")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -297,6 +393,9 @@ TESTS = [
     test_language_preference,
     test_auto_switching,
     test_confirmation_policy,
+    test_offline_engine_is_light,
+    test_memory_edit_and_history,
+    test_wake_word_hey_sam,
 ]
 
 

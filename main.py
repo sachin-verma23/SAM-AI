@@ -95,6 +95,7 @@ from core.echo                 import EchoGuard
 from core.viseme               import VisemeStream
 from core.wake_word            import (
     WakeWordDetector, is_ready as wake_is_ready, install_and_download as wake_install,
+    wake_phrase,
 )
 
 # How long the assistant stays awake with no user speech before it auto-sleeps
@@ -109,6 +110,9 @@ def get_base_dir():
 BASE_DIR        = get_base_dir()
 API_CONFIG_PATH = BASE_DIR / "config" / "api_keys.json"
 PROMPT_PATH     = BASE_DIR / "core" / "prompt.txt"
+# SAM: a much shorter prompt for the local engine. The full one (~15k chars plus
+# the capability list) took minutes to prefill on a 4-core laptop CPU.
+PROMPT_LOCAL_PATH = BASE_DIR / "core" / "prompt_local.txt"
 # The conversation's model. A NAME, not a decision: the ladder lives in
 # core/gemini.py and this is only whichever rung is currently in use, kept here
 # as a module attribute because plugins read it (chat_takeover asks main for it
@@ -354,10 +358,9 @@ _LANGUAGE_RULES = {
 # in Devanagari, English words included.
 _LOCAL_VOICE_NOTE = (
     "[OFFLINE VOICE]\n"
-    "Your reply is read aloud by a local voice. When you answer in Hindi or "
-    "Hinglish, write it in Devanagari script, English words included (for "
-    "example 'वॉल्यूम 50 परसेंट कर दिया है'). English replies stay in Latin "
-    "script. Keep replies short: one to three sentences.\n\n")
+    "Your reply is read aloud by a local voice. Write pure Hindi in Devanagari "
+    "script. Hinglish may be written in Latin script. If the user wrote in "
+    "English, reply in English. Keep replies short: one to three sentences.\n\n")
 
 
 def _language_block() -> str:
@@ -400,6 +403,15 @@ def _gemini_usable() -> bool:
     except Exception:
         return False
     return bool(str(cfg.get("gemini_api_key") or "").strip()) and not cfg.get("local_only")
+
+
+def _load_local_prompt() -> str:
+    """core/prompt_local.txt without its '#' comment lines, or '' if missing."""
+    try:
+        text = PROMPT_LOCAL_PATH.read_text(encoding="utf-8")
+    except Exception:
+        return ""
+    return "\n".join(l for l in text.splitlines() if not l.lstrip().startswith("#")).strip()
 
 
 def _load_system_prompt() -> str:
@@ -508,6 +520,7 @@ TOOL_DECLARATIONS = [
         },
     },
     {
+        "tier": "core",          # local engines keep it under a tight tool budget
         "name": "shutdown_jarvis",
         "description": (
             "Shuts down the assistant completely. "
@@ -614,6 +627,23 @@ def _is_network_error(exc: BaseException) -> bool:
         return True
     return type(exc).__name__ in ("ConnectionClosedError", "ConnectionClosed",
                                   "InvalidStatus", "ConnectError", "ReadTimeout")
+
+
+# Tools that cannot work without the internet. Withheld from the local engine
+# while offline, so its small tool budget goes to tools that can actually run.
+_ONLINE_ONLY_TOOLS = {
+    "web_search", "browser_control", "youtube_video", "flight_finder",
+    "weather_report", "background_tasks", "game_updater", "manage_monitor",
+}
+
+
+def _history_append(role: str, text: str) -> None:
+    """SAM: keep every turn in memory/history/ (local, searchable). Never raises."""
+    try:
+        from memory import history
+        history.append(role, text)
+    except Exception as e:
+        print(f"[History] {e}")
 
 
 class _ReconnectSignal(Exception):
@@ -864,7 +894,7 @@ class JarvisLive:
         return True
 
     def _on_wake_detected(self) -> None:
-        """Called from the detector thread when 'Hey Jarvis' is heard."""
+        """Called from the detector thread when the wake phrase is heard."""
         self.wake(reason="wake word")
 
     def wake(self, reason: str = "wake word") -> None:
@@ -885,7 +915,7 @@ class JarvisLive:
             detector.reset()        # nothing heard before sleeping may wake it again
         self.set_speaking(False)
         self.ui.set_state("SLEEPING")
-        self.ui.write_log(f"SYS: Sleeping — {reason}. Say 'Hey Jarvis' to wake me.")
+        self.ui.write_log(f"SYS: Sleeping — {reason}. Say '{wake_phrase()}' to wake me.")
 
     async def _run_sleep_watch(self) -> None:
         """Auto-sleep after the configured silence window (wake-word mode only)."""
@@ -1335,9 +1365,9 @@ class JarvisLive:
             return
         # Respect wake-word sleep: a typed command must not be answered while
         # asleep either (the sleep gate is not just for the mic). Wake first with
-        # "Hey Jarvis" or the WAKE NOW button.
+        # the wake phrase or the WAKE NOW button.
         if self._wake_enabled and not self._awake:
-            self.ui.write_log("SYS: I'm asleep — say 'Hey Jarvis' or tap WAKE NOW first.")
+            self.ui.write_log(f"SYS: I'm asleep — say '{wake_phrase()}' or tap WAKE NOW first.")
             return
         asyncio.run_coroutine_threadsafe(
             self.session.send_client_content(
@@ -1498,7 +1528,8 @@ class JarvisLive:
 
         memory     = load_memory()
         mem_str    = format_memory_for_prompt(memory)
-        sys_prompt = _load_system_prompt()
+        local      = self._engine_caps is not None
+        sys_prompt = (_load_local_prompt() if local else "") or _load_system_prompt()
 
         now      = datetime.now()
         time_str = now.strftime("%A, %B %d, %Y — %I:%M %p")
@@ -1554,6 +1585,14 @@ class JarvisLive:
             _blocked = set()
             if not _caps.get("vision"):
                 _blocked |= {"screen_process", "close_camera"}
+            # SAM: with no internet, tools that only work online are not
+            # offered — they would take the small model's tool budget and fail.
+            try:
+                from core import connectivity
+                if not connectivity.is_online():
+                    _blocked |= _ONLINE_ONLY_TOOLS
+            except Exception:
+                pass
             if not _caps.get("tools"):
                 _blocked = {(d.get("name") if isinstance(d, dict)
                              else getattr(d, "name", "")) for d in _all_decls}
@@ -1563,6 +1602,15 @@ class JarvisLive:
                                   else getattr(d, "name", "")) not in _blocked]
                 print(f"[SAM] {len(_blocked)} tool(s) withheld — "
                       f"this engine cannot serve them")
+
+        # SAM: a local engine gets the short, curated tool list (same names,
+        # so dispatch is unchanged) — see core/offline_tools.py for why.
+        if self._engine_caps is not None and _all_decls:
+            try:
+                from core.offline_tools import slim_declarations
+                _all_decls = slim_declarations(_all_decls) or _all_decls
+            except Exception as e:
+                print(f"[SAM] offline tool list unavailable: {e}")
 
         _names = {(d.get("name") if isinstance(d, dict) else getattr(d, "name", ""))
                   for d in _all_decls}
@@ -2152,6 +2200,7 @@ class JarvisLive:
                                 self._last_out_logged = ""   # new exchange
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
+                                _history_append("user", full_in)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "user",
@@ -2171,6 +2220,7 @@ class JarvisLive:
                                 self._last_out_logged = full_out
                                 self.ui.write_log(f"{self._asst_name}: {full_out}")
                                 self._session_log.append(f"{self._asst_name}: {full_out}")
+                                _history_append("assistant", full_out)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "jarvis",
@@ -2984,7 +3034,7 @@ class JarvisLive:
                         self.ui.write_log("SYS: Reconnected — conversation restored.")
 
                     # Wake word: if enabled, come up ASLEEP (mic gated, silent)
-                    # until the user says "Hey Jarvis" or taps wake in the UI.
+                    # until the user says the wake phrase or taps wake in the UI.
                     #
                     # Only on the FIRST connect of a run. A reconnect — a dropped
                     # network, the server rotating the connection — used to put an
@@ -3009,7 +3059,7 @@ class JarvisLive:
                     if self._wake_enabled and wake_ok and (first_connect or not self._awake):
                         self._awake = False
                         self.ui.set_state("SLEEPING")
-                        self.ui.write_log("SYS: SAM online — sleeping. Say 'Hey Jarvis' to wake me.")
+                        self.ui.write_log(f"SYS: SAM online — sleeping. Say '{wake_phrase()}' to wake me.")
                     else:
                         self._awake = True
                         self.ui.set_state("LISTENING")

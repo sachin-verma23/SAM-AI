@@ -27,6 +27,9 @@ memory/long_term.json
 memory/*.db
 memory/routines.json
 memory/tasks/
+memory/history/
+memory/*.broken-*
+config/*.broken-*
 reports/
 uploads/
 providers/voices/
@@ -60,3 +63,4 @@ desktop.ini
 logs/
 downloads/
 screenshots/
+models/

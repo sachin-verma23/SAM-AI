@@ -41,7 +41,7 @@ def is_installed() -> bool:
         return False
 
 
-def is_ready() -> bool:
+def _oww_is_ready() -> bool:
     """True if openwakeword is installed AND its model files are present on disk.
 
     This is a cheap, DETERMINISTIC file-existence check. It deliberately does NOT
@@ -67,8 +67,8 @@ def is_ready() -> bool:
         return False
 
 
-def install_and_download(logger: Callable[[str], None] = print,
-                         notify: Callable[[str], None] | None = None) -> tuple[bool, str]:
+def _oww_install(logger: Callable[[str], None] = print,
+                 notify: Callable[[str], None] | None = None) -> tuple[bool, str]:
     """
     One-click setup for the UI button: pip-install openwakeword if missing, then
     download the wake model. Returns (ok, message). Never raises — every failure
@@ -98,7 +98,7 @@ def install_and_download(logger: Callable[[str], None] = print,
         except Exception as e:
             return False, f"model download failed: {e}"
 
-        if not is_ready():
+        if not _oww_is_ready():
             return False, "installed, but the wake model could not be loaded."
         logger("Wake word: ready.")
         return True, "Wake word installed and ready."
@@ -106,7 +106,7 @@ def install_and_download(logger: Callable[[str], None] = print,
         return False, f"setup error: {e}"
 
 
-class WakeWordDetector:
+class _OWWDetector:
     """
     Runs the wake model in a dedicated thread. The mic thread calls feed() with
     raw int16 frames; detections invoke on_detect() (called from this thread —
@@ -230,3 +230,59 @@ class WakeWordDetector:
                 self._queue.get_nowait()
         except Exception:
             pass
+
+
+# ── SAM: choose the wake-word engine ──────────────────────────────────────────
+# "sam"    (default) offline "Hey Sam" through Vosk — core/wake_sam.py
+# "jarvis" the original openWakeWord "Hey Jarvis" model
+# Set "wake_engine" in config/api_keys.json; "wake_threshold" tunes "Hey Sam".
+
+def wake_engine() -> str:
+    try:
+        from memory.config_manager import load_api_keys
+        v = str(load_api_keys().get("wake_engine", "sam")).strip().lower()
+    except Exception:
+        v = "sam"
+    return v if v in ("sam", "jarvis") else "sam"
+
+
+def wake_phrase() -> str:
+    """What the user says to wake the assistant — for every on-screen hint."""
+    return "Hey Jarvis" if wake_engine() == "jarvis" else "Hey Sam"
+
+
+def _sam_threshold() -> float:
+    from core import wake_sam
+    try:
+        from memory.config_manager import load_api_keys
+        v = float(load_api_keys().get("wake_threshold", wake_sam.DEFAULT_THRESHOLD))
+        return min(0.99, max(0.3, v))
+    except Exception:
+        return wake_sam.DEFAULT_THRESHOLD
+
+
+def is_ready() -> bool:
+    if wake_engine() == "jarvis":
+        return _oww_is_ready()
+    from core import wake_sam
+    return wake_sam.is_ready()
+
+
+def install_and_download(logger: Callable[[str], None] = print,
+                         notify: Callable[[str], None] | None = None) -> tuple[bool, str]:
+    if wake_engine() == "jarvis":
+        return _oww_install(logger=logger, notify=notify)
+    from core import wake_sam
+    return wake_sam.install_and_download(logger=logger, notify=notify)
+
+
+def WakeWordDetector(on_detect: Callable[[], None], threshold: float | None = None,
+                     logger: Callable[[str], None] = print,
+                     notify: Callable[[str], None] | None = None):
+    """The detector for the configured engine; both share one interface."""
+    if wake_engine() == "jarvis":
+        return _OWWDetector(on_detect, threshold=threshold or DEFAULT_THRESHOLD,
+                            logger=logger, notify=notify)
+    from core import wake_sam
+    return wake_sam.SamWakeDetector(on_detect, threshold=threshold or _sam_threshold(),
+                                    logger=logger, notify=notify)

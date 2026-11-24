@@ -465,6 +465,33 @@ def forget(key: str, category: str = "notes") -> str:
 
 forget_memory = forget
 
+VALID_CATEGORIES = ("identity", "preferences", "projects", "relationships", "wishes", "notes")
+
+
+def edit_entry(category: str, key: str, value: str,
+               new_category: str = "", new_key: str = "") -> str:
+    """SAM: change a stored fact from the memory panel.
+
+    Changing only the value keeps the key; giving a new key or category moves
+    the fact there (the old one is removed in the same write)."""
+    value = str(value or "").strip()
+    if not value:
+        return "Nothing to save: the value is empty."
+    new_category = (new_category or category).strip().lower()
+    if new_category not in VALID_CATEGORIES:
+        new_category = "notes"
+    new_key = re.sub(r"[^a-z0-9_]+", "_", (new_key or key).strip().lower()).strip("_") or key
+    with _lock:
+        memory = load_memory()
+        if (new_category, new_key) != (category, key):
+            memory.get(category, {}).pop(key, None)
+        memory.setdefault(new_category, {})[new_key] = {
+            "value": _truncate_value(value),
+            "updated": datetime.now().strftime("%Y-%m-%d"),
+        }
+        save_memory(memory)
+    return f"Saved: {new_category}/{new_key}"
+
 
 # ── Session memory ─────────────────────────────────────────────────────────────
 

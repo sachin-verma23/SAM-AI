@@ -368,7 +368,11 @@ class PiperTTS:
         Sentence by sentence so speech starts before the whole answer has been
         synthesised — at fifteen times real time the difference is small, but it
         is free, and it is what makes an interrupt land quickly."""
-        chosen = voice or self._pick(language)
+        # SAM: the SCRIPT of the reply decides the voice before the language
+        # that was heard does. A Hindi voice reading Latin-script Hinglish was
+        # unintelligible (measured), while an English voice reads it passably;
+        # Devanagari always goes to the Hindi voice.
+        chosen = voice or self._pick(_script_language(text) or language)
         if not chosen:
             raise RuntimeError("no Piper voice is chosen")
         model = await asyncio.to_thread(self._load, chosen)
@@ -444,6 +448,18 @@ class PiperTTS:
                      if others else "  |  download more voices to follow other languages")
         return True, (f"Ready in {took:.1f}s, {secs:.1f}s of test audio, "
                       f"{rate} Hz{extra}")
+
+
+def _script_language(text: str) -> str:
+    """'hi' when the text contains Devanagari, 'en' when it is plain Latin
+    letters, '' when it cannot tell (numbers only, other scripts)."""
+    deva = sum(1 for ch in text if "\u0900" <= ch <= "\u097f")
+    latin = sum(1 for ch in text if ch.isascii() and ch.isalpha())
+    if deva and deva >= latin * 0.3:
+        return "hi"
+    if latin and not deva:
+        return "en"
+    return ""
 
 
 def _num(value, default: float) -> float:

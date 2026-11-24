@@ -399,8 +399,30 @@ class PipelineEngine:
             warm = getattr(part, "warmup", None)
             if warm is not None:
                 jobs.append(warm(self._log))
+        jobs.append(self._warm_llm())
         if jobs:
             await asyncio.gather(*jobs, return_exceptions=True)
+
+    async def _warm_llm(self) -> None:
+        """SAM: have the model read the system prompt once, now.
+
+        A local server keeps the prompt it has processed in its cache, so the
+        first real turn then only pays for the user's own words. Measured on a
+        4-core laptop CPU: prompt reading runs at ~14 tokens/s, so a cold system
+        prompt was most of a minute in front of the first answer."""
+        complete = getattr(self._llm, "complete", None)
+        if complete is None or not self._system:
+            return
+        t0 = time.monotonic()
+        try:
+            await asyncio.to_thread(
+                complete,
+                [{"role": "system", "content": self._system},
+                 {"role": "user", "content": "Reply with the single word: ok"}],
+                None)
+            self._log(f"SYS: local model ready in {time.monotonic() - t0:.1f}s")
+        except Exception as e:
+            self._log(f"SYS: local model warm-up failed: {e}")
 
     # ── interruption ─────────────────────────────────────────────────────────
     def interrupt(self) -> None:
@@ -446,12 +468,29 @@ class PipelineEngine:
         first_word = None
         thinking = _ReasoningFilter()
         pending = ""            # visible text not yet a whole sentence
+        # SAM: a prompt-mode model calls a tool by replying with JSON. Speaking
+        # as sentences complete read that JSON aloud (and any "done" the model
+        # tacked on after it, before the tool had run). So when the reply
+        # starts like JSON, nothing is said until the whole reply is in.
+        prompt_mode = self.caps.get("tool_format") == "prompt"
+        held = None             # None = undecided, True = holding, False = speaking
+        raw = ""
         try:
             async for ev in self._llm.chat(self._messages(), self._tools):
                 if ev.get("text"):
                     visible = thinking.feed(ev["text"])
                     if visible and first_word is None:
                         first_word = time.monotonic() - t0
+                    if prompt_mode and held is not False:
+                        raw += visible
+                        head = raw.lstrip()
+                        if not head:
+                            continue
+                        if held is None:
+                            held = head[0] in "{`"
+                        if held:
+                            continue
+                        visible, raw = raw, ""
                     pending += visible
                     # Emit and speak a SENTENCE at a time — never a fragment.
                     #
@@ -470,7 +509,21 @@ class PipelineEngine:
                 if ev.get("tool_calls"):
                     calls.extend(ev["tool_calls"])
 
-            pending += thinking.flush()
+            tail = thinking.flush()
+            if held:
+                # The reasoning filter holds back the last few characters until
+                # the end; they belong to the held JSON, not to speech.
+                raw += tail
+                parsed = _parse_prompt_call(raw, set(self.tool_names()))
+                if parsed:
+                    # The call is the whole answer; words after it are dropped
+                    # because they would claim a result nobody has seen yet.
+                    calls = [parsed]
+                    pending = ""
+                else:
+                    pending = raw   # it was not a tool call after all: say it
+            else:
+                pending += raw + tail   # raw holds only leading whitespace here
             if pending.strip():
                 said.append(pending.strip())
                 if first_word is None:
