@@ -228,6 +228,66 @@ def test_auto_switching() -> None:
     check(isinstance(connectivity.is_online(), bool), "a real connectivity probe answers")
 
 
+# ── Phase 5 ──────────────────────────────────────────────────────────────────
+
+def test_confirmation_policy() -> None:
+    section("Sensitive actions wait for the on-screen confirmation")
+    import threading, time as _t
+    from core import confirm, policy
+    from actions.file_controller import file_controller
+    shown, said = [], []
+    confirm.bind(show=lambda t, d: shown.append(t), hide=lambda: None,
+                 log=lambda m: None, say=said.append)
+    try:
+        with _TempConfig():
+            check(policy.needs_confirm("delete_files"), "deleting asks by default")
+            check(not policy.needs_confirm("close_app"), "closing an app does not ask by default")
+        home_tmp = Path.home() / ".sam_test_tmp"
+        home_tmp.mkdir(exist_ok=True)
+        try:
+            f = home_tmp / "victim.txt"
+            f.write_text("keep me", encoding="utf-8")
+            out = file_controller({"action": "delete", "path": str(home_tmp), "name": "victim.txt"})
+            check("[CONFIRMATION_PENDING]" in out and f.exists(), "delete is parked, the file is untouched")
+            check(bool(shown) and "victim.txt" in shown[-1], "the banner names the file")
+            confirm.resolve(False)
+            check(f.exists(), "CANCEL keeps the file")
+            check(any("CANCELLED" in x for x in said), "SAM is told it was cancelled")
+
+            out = file_controller({"action": "write", "path": str(home_tmp), "name": "victim.txt",
+                                   "content": "new"})
+            check("[CONFIRMATION_PENDING]" in out, "overwriting an existing file asks first")
+            confirm.resolve(True)
+            for _ in range(50):
+                if f.read_text(encoding="utf-8") == "new":
+                    break
+                _t.sleep(0.05)
+            check(f.read_text(encoding="utf-8") == "new", "CONFIRM performs the write")
+            check(any("CONFIRMED ACTION RESULT" in x for x in said), "SAM is told the result")
+
+            out = file_controller({"action": "write", "path": str(home_tmp), "name": "fresh.txt",
+                                   "content": "x"})
+            check("[CONFIRMATION_PENDING]" not in out and (home_tmp / "fresh.txt").exists(),
+                  "creating a new file does not ask")
+        finally:
+            for p in home_tmp.glob("*"):
+                p.unlink()
+            home_tmp.rmdir()
+
+        result = {}
+        th = threading.Thread(target=lambda: result.setdefault(
+            "ok", policy.approve_and_wait("install_packages", "Install x", "x")))
+        th.start(); _t.sleep(0.3); confirm.resolve(False); th.join(5)
+        check(result.get("ok") is False and not th.is_alive(), "a background job hears CANCEL at once")
+        th = threading.Thread(target=lambda: result.__setitem__(
+            "ok2", policy.approve_and_wait("install_packages", "Install y", "y")))
+        th.start(); _t.sleep(0.3); confirm.resolve(True); th.join(5)
+        check(result.get("ok2") is True, "a background job hears CONFIRM")
+        check(policy.needs_confirm("power"), "power actions always ask")
+    finally:
+        confirm.bind(None, None, None, None)
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -236,6 +296,7 @@ TESTS = [
     test_rebrand,
     test_language_preference,
     test_auto_switching,
+    test_confirmation_policy,
 ]
 
 

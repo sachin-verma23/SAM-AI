@@ -2878,6 +2878,7 @@ class JarvisLive:
             show = self.ui.show_confirm,
             hide = self.ui.hide_confirm,
             log  = self.ui.write_log,
+            say  = self.plugin_say,
         )
         set_trim_notifier(self.ui.write_log)
 

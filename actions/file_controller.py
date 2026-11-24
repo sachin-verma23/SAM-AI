@@ -645,6 +645,60 @@ def get_file_info(path: str, name: str = "") -> str:
     except Exception as e:
         return f"Could not get file info: {e}"
 
+def _target(path: str, name: str) -> Path:
+    base = _resolve_path(path)
+    return (base / name) if name else base
+
+
+def _confirm_if_sensitive(action: str, params: dict, path: str, name: str):
+    """SAM: put destructive file actions behind the on-screen confirmation
+    (core/policy.py decides which). Returns the tool's answer when the action
+    was parked or run here, or None to carry on as normal."""
+    from core import policy
+
+    if params.get("_confirmed"):
+        return None
+    again = dict(params, _confirmed=True)
+
+    def run():
+        return file_controller(again)
+
+    try:
+        if action == "delete":
+            t = _target(path, name)
+            if not t.exists():
+                return None                     # the action itself says "not found"
+            kind = "folder" if t.is_dir() else "file"
+            return policy.gate("delete_files", f"Delete {kind} '{t.name}'",
+                               f"{t} — goes to the Recycle Bin", run)
+        if action in ("move", "copy"):
+            src = _target(path, name)
+            dest = params.get("destination", "")
+            if not src.exists() or not dest:
+                return None
+            dst = _resolve_path(dest)
+            landing = dst / src.name if dst.is_dir() else dst
+            if landing.exists():
+                return policy.gate("overwrite_files", f"Replace '{landing.name}'",
+                                   f"{action} {src} -> {landing} would overwrite it", run)
+            if action == "move":
+                return policy.gate("move_files", f"Move '{src.name}'",
+                                   f"{src} -> {dst}", run)
+            return None
+        if action == "write" and not params.get("append"):
+            t = _target(path, name)
+            if t.exists() and t.is_file() and t.stat().st_size > 0:
+                return policy.gate("overwrite_files", f"Overwrite '{t.name}'",
+                                   f"{t} already has content; it will be replaced", run)
+            return None
+        if action == "organize_desktop":
+            return policy.gate("organize_files", "Organise the Desktop",
+                               "Moves Desktop files into folders by type", run)
+    except Exception as e:
+        print(f"[File] confirmation check failed: {e}")
+    return None
+
+
 def file_controller(
     parameters: dict = None,
     response=None,
@@ -660,6 +714,10 @@ def file_controller(
         print(f"[File] {action} {name or path}")  # terminal, not the HUD
 
     try:
+        gated = _confirm_if_sensitive(action, params, path, name)
+        if gated is not None:
+            return gated
+
         if action == "list":
             return list_files(path)
 

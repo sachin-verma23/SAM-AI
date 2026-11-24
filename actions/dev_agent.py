@@ -265,6 +265,11 @@ Code for {file_path}:"""
 def _install_dependencies(dependencies: list[str], project_dir: Path) -> str:
     if not dependencies:
         return "No external dependencies."
+    from core import policy
+    if not policy.approve_and_wait(
+            "install_packages", f"Install {len(dependencies)} Python package(s)",
+            ", ".join(dependencies)[:280]):
+        return "Dependency install skipped — not confirmed by the user."
 
     to_install = []
     for dep in dependencies:
@@ -363,6 +368,10 @@ def _try_auto_install(error_output: str, project_dir: Path) -> bool:
     pkg = match.group(1).replace("_", "-").split(".")[0]
     print(f"[DevAgent] 🔧 Auto-installing missing package: {pkg}")
     try:
+        from core import policy
+        if not policy.approve_and_wait("install_packages", f"Install {pkg}",
+                                       "The coding agent wants this package to run the project"):
+            return False
         result = subprocess.run(
             [sys.executable, "-m", "pip", "install", pkg],
             capture_output=True, text=True,

@@ -340,6 +340,17 @@ def send_message(
         )
 
     preview = message_text[:50] + ("…" if len(message_text) > 50 else "")
+
+    def _go() -> str:
+        return _start_sending(player, platform, receiver, message_text, preview)
+
+    from core import policy
+    return policy.gate("send_message", f"Send {platform} message to {receiver}",
+                       f'"{message_text[:160]}"', _go)
+
+
+def _start_sending(player, platform: str, receiver: str, message_text: str,
+                   preview: str) -> str:
     print(f"[SendMessage] 📨 {platform} → {receiver}: {preview}")
     if player:
         player.write_log(f"[msg] {platform} → {receiver}")   # the message itself IS the news

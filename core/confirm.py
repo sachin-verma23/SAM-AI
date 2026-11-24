@@ -53,6 +53,7 @@ class _Pending:
     detail:  str
     run:     Callable[[], str]
     at:      float
+    on_cancel: Optional[Callable[[], None]] = None
 
 
 _pending: Optional[_Pending] = None
@@ -63,12 +64,15 @@ _lock = threading.Lock()
 _show_cb: Optional[Callable[[str, str], None]] = None
 _hide_cb: Optional[Callable[[], None]] = None
 _log_cb:  Optional[Callable[[str], None]] = None
+# SAM: speaks the outcome after CONFIRM, so the assistant knows what happened
+# instead of the result only reaching the activity log.
+_say_cb:  Optional[Callable[[str], None]] = None
 
 
-def bind(show, hide, log=None) -> None:
+def bind(show, hide, log=None, say=None) -> None:
     """Wire this module to the HUD. Called once from main.py at startup."""
-    global _show_cb, _hide_cb, _log_cb
-    _show_cb, _hide_cb, _log_cb = show, hide, log
+    global _show_cb, _hide_cb, _log_cb, _say_cb
+    _show_cb, _hide_cb, _log_cb, _say_cb = show, hide, log, say
 
 
 def _log(msg: str) -> None:
@@ -79,7 +83,8 @@ def _log(msg: str) -> None:
             pass
 
 
-def request(key: str, title: str, detail: str, run: Callable[[], str]) -> str:
+def request(key: str, title: str, detail: str, run: Callable[[], str],
+            on_cancel: Optional[Callable[[], None]] = None) -> str:
     """Park an irreversible action behind the on-screen gate.
 
     Returns the sentence the tool should hand back to the model — phrased as an
@@ -95,7 +100,7 @@ def request(key: str, title: str, detail: str, run: Callable[[], str]) -> str:
 
     with _lock:
         _pending = _Pending(key=key, title=title, detail=detail,
-                            run=run, at=time.monotonic())
+                            run=run, at=time.monotonic(), on_cancel=on_cancel)
 
     try:
         _show_cb(title, detail)
@@ -138,6 +143,18 @@ def resolve(accepted: bool) -> None:
 
     if not accepted:
         _log(f"SYS: Cancelled — {p.title}")
+        if p.on_cancel:
+            try:
+                p.on_cancel()
+            except Exception:
+                pass
+        if _say_cb:
+            try:
+                _say_cb(f"[CONFIRMATION CANCELLED] The user pressed CANCEL for "
+                        f"'{p.title}'. Nothing was done. Acknowledge in a few words, "
+                        f"in their language. Do not call any tools.")
+            except Exception:
+                pass
         return
 
     def _worker():
@@ -145,7 +162,15 @@ def resolve(accepted: bool) -> None:
             result = p.run() or "Done."
             _log(f"SYS: Confirmed — {p.title}. {result}")
         except Exception as e:
+            result = f"failed: {e}"
             _log(f"ERR: {p.title} failed — {e}")
+        if _say_cb:
+            try:
+                _say_cb(f"[CONFIRMED ACTION RESULT] The user confirmed '{p.title}' on "
+                        f"screen. Result: {str(result)[:400]}\nTell them the outcome in "
+                        f"one short sentence, in their language. Do not call any tools.")
+            except Exception:
+                pass
 
     threading.Thread(target=_worker, daemon=True,
                      name=f"confirm-{p.key}").start()

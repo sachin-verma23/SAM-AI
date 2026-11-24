@@ -645,10 +645,11 @@ def computer_control(
             return _focus_window(params.get("title", ""))
 
         if action in ("close_app", "close_application", "quit_app"):
-            return _close_app(
-                params.get("app_name") or params.get("text") or "",
-                confirmed_index=params.get("confirmed"),
-            )
+            from core import policy
+            app = params.get("app_name") or params.get("text") or ""
+            return policy.gate(
+                "close_app", f"Close {app}", "Unsaved work in it could be lost",
+                lambda: _close_app(app, confirmed_index=params.get("confirmed")))
 
         if action == "random_data":
             dt     = params.get("type", "name")
