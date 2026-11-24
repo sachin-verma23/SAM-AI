@@ -236,3 +236,31 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 5. Gate the dashboard behind a setting (H2).
 6. Fix the `1007` check (M1) and the weather tool (M6).
 7. Clean up: dead code (L2, L3), remove unused requirements, replace "Sir" with the configured address form (L1).
+
+---
+
+## 5. Fix status after SAM v1.0 (2026-11-24)
+
+| # | Issue | Status | How |
+|---|---|---|---|
+| C1 | `.gitignore` leaked secrets | ✅ Fixed | Comments on their own lines; personal data paths added |
+| C2 | Memory wipe on a bad write | ✅ Fixed | Atomic writes, unreadable file kept as `.broken-<time>`, one lock across read-modify-write |
+| H1 | 22 plugins missing | ⚠️ Partly | Their dead dependencies were removed; their features are still missing (WhatsApp sending stays blind) |
+| H2 | Dashboard always on, LAN, HTTP | ✅ Fixed | Starts only on REMOTE (or `dashboard_enabled`); port 8765 (8000 collided with Laravel) |
+| H3 | Blind keystrokes | ⚠️ Mitigated | Every message now needs CONFIRM first; typing is still unverified |
+| H4 | Python 3.14 | ✅ Checked | All needed packages have 3.14 wheels; app, tests, Vosk, MediaPipe, Whisper, Piper all run |
+| M1 | "1007" = bad key | ✅ Fixed | Uses `gemini.is_key_error` |
+| M2 | Network errors by text | ✅ Fixed | Also matched by exception type |
+| M3 | `user_data` fake data | ⏳ Open | |
+| M4 | dev_agent installs into SAM's venv | ⚠️ Mitigated | Every install now needs CONFIRM |
+| M5 | `_open_vscode` false success | ⏳ Open | |
+| M6 | Weather only opens a browser | ⏳ Open | |
+| M7 | Serial tool calls | ⏳ Open (by design of the Live loop) | |
+| M8 | Noisy routines | ✅ Fixed | 30-min check-in, 2-hourly news 08–22, quiet hours 23–07 |
+| M9 | Clipboard panel shows copied text | ⏳ Open | |
+| L1 | Hard-coded "Sir" | ✅ Fixed | 56 strings neutralised |
+| L2 | Dead MARK XL modules | ✅ Removed | |
+| L3 | Unused crypto-js | ✅ Removed | |
+| L5 | `"JARVI    S"` typo | ✅ Fixed | Now `"SAM"` |
+| L9 | README errors | ✅ Fixed | New README; original kept in `docs/` |
+| L12 | Wrong pywin32 path in setup | ✅ Fixed | `sysconfig` scripts path, checked in a fresh interpreter |

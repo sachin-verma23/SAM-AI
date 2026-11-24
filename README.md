@@ -27,6 +27,27 @@ Self-tests (no network or key needed):
 .\.venv\Scripts\python.exe -m providers._tests
 ```
 
+## What SAM does
+
+| | |
+|---|---|
+| 🗣️ Voice | Hindi, English and Hinglish. Choose with "ab se Hinglish mein baat karo" or leave it on auto |
+| 🌐 Online + offline | Gemini Live while online; Ollama (llama3.2:3b) + Whisper + Piper offline, switched automatically |
+| 🎙️ Wake word | "Hey Sam" (offline, Vosk). Turn it on in ⚙ → CONTROLS → WAKE WORD |
+| 🧠 Memory | Remembers facts and every conversation locally; view, edit, add and delete in the memory panel |
+| 🖥️ PC control | Apps, files, volume, brightness, media, windows, browser, reminders, routines |
+| ✅ Safety | Delete, overwrite, move, send message, shutdown and installs wait for your CONFIRM on screen |
+| ✋ Gestures | Webcam hand gestures for media, volume and navigation (off by default) |
+| 📊 HUD | Animated assistant with live AI / internet / mic / camera / wake-word status |
+
+## Offline mode setup (one time)
+
+1. Install Ollama: `winget install Ollama.Ollama`
+2. Download the model: `ollama pull llama3.2:3b`
+3. In SAM: ⚙ → ENGINE & PROVIDERS → **AUTO (SAM)**, with Whisper (local, small), Ollama (llama3.2:3b) and Piper.
+
+On a 4-core laptop the offline model needs about a minute to warm up after a switch, then answers in 5–17 seconds. Online answers take about a second.
+
 ## Documentation
 
 | File | What it covers |

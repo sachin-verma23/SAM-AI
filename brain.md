@@ -1,11 +1,12 @@
-# brain.md — Everything about this project
+# brain.md — Everything about SAM
 
-> The complete map of **Mark LVII ("JARVIS")** as it exists in this folder: what it is, how every piece works, where every setting lives, and how to customise it.
+> The complete map of **SAM** (built on MARK LVII) as it exists in this folder: what it is, how every piece works, where every setting lives, and how to customise it.
 > Read this before changing anything. For the list of bugs and gaps, see [AUDIT_REPORT.md](AUDIT_REPORT.md).
 
 ---
 
 ## Table of contents
+0. [SAM v1.0 — what was added](#0-sam-v10--what-was-added-on-top-of-mark-lvii)
 1. [What this project is](#1-what-this-project-is)
 2. [How to run it](#2-how-to-run-it)
 3. [Big picture: architecture](#3-big-picture-architecture)
@@ -37,9 +38,93 @@
 
 ---
 
+## 0. SAM v1.0 — what was added on top of MARK LVII
+
+SAM is MARK LVII customised for **Sachin Verma**. Everything below is new or changed; the rest of this document describes the original architecture, which still applies. Progress and test results: [ROADMAP.md](ROADMAP.md).
+
+### New files
+| File | What it does |
+|---|---|
+| `core/connectivity.py` | Cached TCP probe of Gemini's host (no key, no quota). `is_online()`, `stable_online()` (2 good probes), `force()` for tests |
+| `core/policy.py` | Which actions need the on-screen CONFIRM; `gate()` for tools, `approve_and_wait()` for background jobs |
+| `core/offline_tools.py` | The short, curated tool list the local model gets (same tool names, short schemas) |
+| `core/prompt_local.txt` | The short offline system prompt, with tool-call examples |
+| `core/wake_sam.py` | Offline "Hey Sam" through Vosk with a grammar and word confidence |
+| `core/gestures.py` | Webcam hand-gesture control (MediaPipe GestureRecognizer + swipe detection) |
+| `memory/history.py` | Every conversation turn, one JSONL file per day in `memory/history/`, keyword search |
+| `actions/sam_settings.py` | Voice tool: `set_language`, `set_mode`, `set_lite`, `get` |
+| `actions/conversation_history.py` | Voice tool: search / recent / day of earlier conversations |
+| `actions/gesture_control.py` | Voice tool: gestures on / off / status |
+| `tests/sam_tests.py` | Self-test for every SAM change: `python -m tests.sam_tests` (89 checks) |
+| `models/` (git-ignored) | `vosk-model-small-en-in-0.4/` (36 MB) and `gesture_recognizer.task` (8 MB) |
+
+### Changed behaviour
+| Area | MARK LVII | SAM |
+|---|---|---|
+| Name | JARVIS | SAM, owner Sachin Verma, version "SAM v1.0" (`gui/theme.py`) |
+| Memory writes | in place; a crash could wipe `long_term.json` | temp file + rename; an unreadable file is kept as `.broken-<time>` |
+| Phone dashboard | always on, port 8000 | starts only when REMOTE is pressed (or `dashboard_enabled`); port `dashboard_port`, default 8765 |
+| Routines | check-in after 15 min, news every 30 min round the clock | check-in after 30 min (max hourly), news every 2 h 08:00–22:00, quiet hours 23:00–07:00 |
+| Language | "never mix languages" | `preferred_language`: auto / hindi / english / hinglish; Hinglish is one language; "aap" form |
+| Engine | Gemini or pipeline, chosen by hand | plus `auto`: Gemini online, local pipeline offline / no key / out of quota |
+| Offline AI | not set up | Ollama `llama3.2:3b`, Whisper `small` int8 CPU, Piper `hi_IN-rohan-medium` + `en_US-lessac-medium` |
+| Confirmation | shutdown, restart, Wi-Fi | plus delete, overwrite, move, organise desktop, send message, package installs (close app: optional) |
+| After CONFIRM / CANCEL | result only in the activity log | SAM is told the result and says it |
+| Memory panel | view, delete | view, edit (✎), add (+), delete |
+| Wake word | "Hey Jarvis" (openWakeWord) | "Hey Sam" (Vosk); `wake_engine: jarvis` brings the old one back |
+| Footer | engine + mic | AI (online/offline + model), NET, MIC, CAM, WAKE — live |
+| HUD | 30/20 Hz repaint | same, or 15/10 Hz with `ui_lite` |
+| Error "1007" | opened the API-key screen | only a real bad-key message does (`gemini.is_key_error`) |
+| Spoken errors | "Sir, …" hard-coded | neutral; the model addresses the user |
+
+### How the offline engine works (and why it is built this way)
+Measured on this laptop (i5-8250U, 8 GB, no GPU):
+- Ollama reads a prompt at **~25 tokens/s** and generates at **~6.7 tokens/s** with `llama3.2:3b`. A prompt it has already read is cached: 1,229 tokens took **50 s cold and 0.8 s cached**.
+- llama3.2's chat template re-inserts native tool definitions into **every** user turn, so native tools cost ~100 s per reply.
+
+So offline SAM uses:
+1. `core/prompt_local.txt` (~1.4k chars) instead of the full prompt (~15k).
+2. `core/offline_tools.py`: 13 short tools in **prompt format** (`"tool_format": "prompt"` on the Ollama provider). They live in the system prompt, which Ollama caches.
+3. **Warm-up**: when the local engine starts, `PipelineEngine._warm_llm()` makes the model read the system prompt once (45–70 s, in the background).
+4. Replies that start with `{` are **held** until complete. If they are a tool call, nothing is spoken, including any "done" the model adds after the JSON.
+5. Piper chooses the voice by the reply's **script**: Devanagari → Hindi voice, Latin → English voice.
+6. Tools that need the internet (`web_search`, `browser_control`, `youtube_video`, `weather_report`, `background_tasks`, …) are withheld while offline.
+
+Result (offline end-to-end test): warm-up ~65 s, then replies in **5–17 s**; "Volume 30 percent kar do" → `computer_settings volume_set 30`; "Notepad kholo" → `open_app Notepad`.
+
+### Auto switching
+`main._resolve_engine_caps()` asks `_auto_wants_local()` before every connect: no internet, no Gemini key, or every Live model cooling → local pipeline; otherwise Gemini Live. During a session, `_watch_connectivity()` checks every 15 s: offline while on Gemini → rebuild on local; back online (two good probes) while on local → rebuild on Gemini. A switch starts a fresh conversation (long-term memory and history are kept). One-shot model calls (`core/gemini.call`) skip all Gemini rungs while offline and go straight to the local provider.
+
+### New settings in `config/api_keys.json`
+| Key | Default | Meaning |
+|---|---|---|
+| `preferred_language` | `auto` | auto / hindi / english / hinglish |
+| `providers.mode` | `auto` (set during setup) | gemini / pipeline / auto |
+| `providers.creds["openai_compat@ollama"].tool_format` | `prompt` | prompt-format tools for the slow CPU |
+| `dashboard_enabled` | false | start the phone dashboard at launch |
+| `dashboard_port` | 8765 | HTTP port (HTTPS = +1) |
+| `confirm_actions` | see `core/policy.py` | e.g. `{"move_files": false, "close_app": true}` |
+| `wake_engine` | `sam` | sam (Vosk "Hey Sam") / jarvis (openWakeWord) |
+| `wake_threshold` | 0.85 | Hey Sam word confidence; raise if it wakes by itself |
+| `gestures_enabled` | false | webcam gestures |
+| `gesture_actions` | see `core/gestures.py` | remap a gesture to any `computer_settings` action, `wake_sam`, or `""` |
+| `ui_lite` | false | slower HUD repaint to save CPU |
+
+### Gestures (when switched on)
+✋ open palm = play/pause · ✊ fist = mute/unmute · 👍 / 👎 = volume ±10 (repeats while held) · ✌️ = next track · ☝️ = previous track · 🤟 = wake SAM · swipe ← / → = back / forward. A pose must be held ~0.5 s and then rests 1.5 s.
+
+### Voice commands added
+- "ab se Hindi / English / Hinglish mein baat karo", "jo bhasha main bolun usi mein jawab do" → `sam_settings set_language`
+- "offline mode", "online mode", "auto mode" → `sam_settings set_mode`
+- "lite mode on karo" → `sam_settings set_lite`
+- "kal humne kya baat ki thi?", "maine folder ka naam kya bataya tha?" → `conversation_history`
+- "gestures on / off karo", "kaun se gestures hain?" → `gesture_control`
+
+---
+
 ## 1. What this project is
 
-- **Name:** MARK LVII (57th "Mark"), by **FatihMakes** (YouTube @FatihMakes). The assistant calls itself **JARVIS** by default; you can rename it.
+- **Name:** **SAM**, owned by **Sachin Verma**, built on MARK LVII by **FatihMakes** (YouTube @FatihMakes). The assistant calls itself **SAM** by default; you can rename it.
 - **What it does:** a desktop voice assistant that **hears** (microphone), **speaks** (speakers), **sees** (screenshot or webcam, on request) and **controls the computer** (apps, keyboard, mouse, files, browser, settings), with long-term memory, reminders, routines and background research.
 - **Brain:** Google **Gemini Live API**. One WebSocket carries your audio in and the model's audio out, both transcripts, and tool calls. Optionally, a **local pipeline** replaces it: Whisper (speech-to-text) → any OpenAI-compatible LLM (Ollama, LM Studio, Groq…) → Piper, system voice or ElevenLabs (text-to-speech).
 - **Window:** PyQt6 "command-center" HUD with a 3-D reactor core or a holographic face that lip-syncs.
@@ -163,7 +248,7 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
 | `routines/` | Routine engine (see §14). |
 | `cloud.py` | "Second body" server for a VPS with Telegram. **Not reachable:** its plugin `cloud_agent.py` is missing. Can be run as `python -m core.cloud`. |
 | `screenview.py`, `screenact.py` | Accessibility-tree screen reading and clicking. **Orphaned:** used by the missing `screen_agent` plugin. |
-| `stt.py`, `tts.py`, `llm_client.py`, `installer.py` | **Dead legacy code ("MARK XL")**, never imported. |
+| ~~`stt.py`, `tts.py`, `llm_client.py`, `installer.py`~~ | Dead legacy code ("MARK XL") — **removed in SAM**. |
 
 ### `gui/`: the window
 | File | Purpose |
@@ -448,7 +533,7 @@ Written only through `memory/config_manager.py` (atomic tmp+rename plus a lock; 
 | `gemini_api_key` | (setup) | Gemini key, stored **in plain text**. |
 | `local_only` | false | true means never use Gemini. |
 | `os_system` | auto | windows/mac/linux. |
-| `assistant_name` | "JARVIS" | Its name (Customise panel). |
+| `assistant_name` | "SAM" | Its name (Customise panel). |
 | `user_name` | "" | How it addresses you; empty means "sir"-equivalent. |
 | `voice_name` | "Charon" | Charon, Puck, Kore, Fenrir or Aoede. |
 | `ui_color` | `#00d4ff` | Accent colour (hue-linked palette). |
@@ -526,7 +611,7 @@ Examples by voice: "move the briefing to 08:30", "every Friday at 17:00 remind m
 
 | Layer | File | What it does |
 |---|---|---|
-| Confirmation gate | `core/confirm.py` | `request(title, detail, fn)` shows a CONFIRM/CANCEL banner; the tool returns `[CONFIRMATION_PENDING]`; `fn` runs only after **you** press CONFIRM. Used for shutdown, restart and Wi-Fi. |
+| Confirmation gate | `core/confirm.py` + `core/policy.py` | `request(title, detail, fn)` shows a CONFIRM/CANCEL banner; the tool returns `[CONFIRMATION_PENDING]`; `fn` runs only after **you** press CONFIRM. Used for shutdown, restart, Wi-Fi and (SAM) delete, overwrite, move, organise desktop, send message, package installs. SAM is told the result. |
 | Undo | `core/undo.py` | Actions push a reverse function. The `undo` tool runs the most recent; `list` shows the history. |
 | Honest outcomes | `core/outcome.py` | done / unverified / failed / started / ask. |
 | Untrusted wrapper | `core/outcome.untrusted()` + prompt | Web, document and screen text is marked as data; instructions inside it are reported, not obeyed. |
@@ -576,7 +661,7 @@ Other uses: **sidecar** (one-shot calls go to another model when Gemini's text q
 
 ## 19. Phone dashboard
 
-- `dashboard/server.py`: FastAPI plus uvicorn on the same asyncio loop. **Starts at every launch.** Binds to `0.0.0.0`, HTTP **:8000** (or HTTPS :8001 if `dashboard_https`).
+- `dashboard/server.py`: FastAPI plus uvicorn on the same asyncio loop. **SAM: starts only when REMOTE is pressed** (or `dashboard_enabled`). Binds to `0.0.0.0`, HTTP **:8765** by default (`dashboard_port`; HTTPS on the next port if `dashboard_https`).
 - **Pairing:** press REMOTE to get a QR code and a one-time 8-character key (expires after 10 min) → `/auto-login?key=` → a device token (in memory). Login throttling; `/api/revoke-devices`.
 - **Endpoints:** `/login`, `/`, `/auto-login`, `/api/device-login`, `/api/revoke-devices`, `/api/command` (text → session), `/api/wake`, `/ws/phone-audio` (phone mic → session; mutes the PC mic while streaming), `/api/upload`, `/api/files`, `/uploads/{file}`, `/ws` (live log and status broadcast).
 - Commands are AES-256-GCM encrypted (PBKDF2 from the pairing key) **only over HTTPS**; plain HTTP sends them in clear.
@@ -586,7 +671,7 @@ Other uses: **sidecar** (one-shot calls go to another model when Gemini's text q
 
 ## 20. Wake word, push-to-talk, echo guard, lip-sync
 
-- **Wake word** (`core/wake_word.py`): `openwakeword` ONNX model, its own thread, mic frames pushed by a queue. While asleep **nothing is streamed** to Gemini. Wake by saying "Hey Jarvis", pressing WAKE NOW, holding the push-to-talk key, or a remote command. Auto-sleeps after 120 s with no speech. Installed with one click from CONTROLS.
+- **Wake word** (`core/wake_word.py` → `core/wake_sam.py`): SAM listens for **"Hey Sam"** with Vosk (or the original openWakeWord "Hey Jarvis" with `wake_engine: jarvis`), on its own thread, mic frames pushed by a queue. While asleep **nothing is streamed** to Gemini. Wake by saying "Hey Sam", pressing WAKE NOW, holding the push-to-talk key, or a remote command. Auto-sleeps after 120 s with no speech. Installed with one click from CONTROLS.
 - **Push-to-talk** (`core/hotkey.py`): Ctrl+Space; global on Windows (polls `GetAsyncKeyState` 30 times a second), window-only elsewhere. With a local engine, the key release ends the turn.
 - **Echo guard** (`core/echo.py`): compares band energies of the mic against what is playing and calibrates itself. Used only for the echo tail; voice barge-in is disabled.
 - **Lip-sync:** audio formants (timing and vowels) plus transcript visemes (`core/viseme.py`, which knows closures such as m, b and p), scheduled against the real playback time. About 50 shapes a second. Biased to lead the audio slightly, never lag.
@@ -651,8 +736,8 @@ In `run()`'s `except BaseException`:
 ## 25. Dependencies
 
 From `requirements.txt` (✓ = used; ✗ = no file imports it in this copy):
-PyQt6 ✓ · sounddevice ✓ · numpy ✓ · google-genai ✓ · httpx ✓ · requests ✓ · certifi ✓ · beautifulsoup4 ✓ · playwright ✓ · yt-dlp ✓ · pyautogui ✓ · pyperclip ✓ · pillow ✓ · opencv-python ✓ · mss ✓ · psutil ✓ · send2trash ✓ · python-pptx ✓ · fastapi ✓ · uvicorn ✓ · cryptography ✓ · python-multipart ✓ · qrcode ✓ · openpyxl ✓ · youtube-transcript-api ✓ · pygetwindow ✓ · ddgs ✓ · pdfplumber ✓ · PyPDF2 ✓ · python-docx ✓ · pynvml ✓ (deprecated; it warns) · Windows only: comtypes ✓, pycaw ✓, win10toast ✓, pywin32 ✓, wmi ✓, pywinauto ✓
-**Unused (for the missing plugins):** google-api-python-client ✗ · google-auth-oauthlib ✗ · tinytuya ✗ · paho-mqtt ✗
+PyQt6 ✓ · sounddevice ✓ · numpy ✓ · google-genai ✓ · httpx ✓ · requests ✓ · certifi ✓ · beautifulsoup4 ✓ · playwright ✓ · yt-dlp ✓ · pyautogui ✓ · pyperclip ✓ · pillow ✓ · opencv-contrib-python ✓ · mediapipe ✓ (gestures) · mss ✓ · psutil ✓ · send2trash ✓ · python-pptx ✓ · fastapi ✓ · uvicorn ✓ · cryptography ✓ · python-multipart ✓ · qrcode ✓ · openpyxl ✓ · youtube-transcript-api ✓ · pygetwindow ✓ · ddgs ✓ · pdfplumber ✓ · PyPDF2 ✓ · python-docx ✓ · pynvml ✓ (deprecated; it warns) · Windows only: comtypes ✓, pycaw ✓, win10toast ✓, pywin32 ✓, wmi ✓, pywinauto ✓
+**Removed in SAM (only the missing plugins used them):** google-api-python-client · google-auth-oauthlib · tinytuya · paho-mqtt. **Added:** mediapipe, opencv-contrib-python (replaces opencv-python). **Installed for SAM but optional:** vosk (Hey Sam), faster-whisper, piper-tts (offline voice).
 **Optional, installed from the UI:** openwakeword (wake word), faster-whisper (local STT), piper-tts (local voice).
 
 ---
@@ -689,7 +774,7 @@ The README describes ~22 plugins that **are not in the GitHub repo** (only `plug
 | **Add an inline tool that needs session state** | Add it to `TOOL_DECLARATIONS` (main.py:385) and a branch in `_execute_tool` (main.py:1574). |
 | **Change wake-word sleep time** | `WAKE_SLEEP_TIMEOUT` (main.py:102). |
 | **Change stall timeout** | `_STALL_LIMIT` (main.py:178). |
-| **Turn off the phone dashboard** | Currently there is no setting. Comment out the `DashboardServer` block in `run()` (main.py:2720-2730). |
+| **Phone dashboard** | Off by default in SAM; press REMOTE, or set `dashboard_enabled: true` to start it at launch. |
 | **Add a UI signal** | See §18, "Pattern for a new cross-thread UI feature". |
 | **Test changes to providers** | `python -m providers._tests` |
 

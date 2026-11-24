@@ -93,10 +93,15 @@ def main() -> None:
 
     # ── OS-specific post-install notes ────────────────────────────────────────
     if OS == "Windows":
-        try:
-            import win32com.client  # noqa: F401
-        except ImportError:
-            postinstall = Path(sys.executable).parent / "Scripts" / "pywin32_postinstall.py"
+        # Checked in a fresh interpreter: this process imported its modules
+        # before pip ran, so an in-process import can fail on a fine install.
+        check = subprocess.run([sys.executable, "-c", "import win32com.client"],
+                               capture_output=True)
+        if check.returncode != 0:
+            import sysconfig
+            # In a venv sys.executable is already inside Scripts\, so the old
+            # parent/"Scripts" path pointed at Scripts\Scripts\.
+            postinstall = Path(sysconfig.get_path("scripts")) / "pywin32_postinstall.py"
             print(
                 "\n⚠️  pywin32 did not register correctly — desktop-shortcut "
                 "creation will use a slower fallback. To fix it, run:\n"

@@ -491,7 +491,7 @@ def _build_project(
     try:
         plan = _plan_project(description, language)
     except RateLimitError:
-        msg = "Rate limit reached, sir. Please try again in a moment."
+        msg = "Rate limit reached. Please try again in a moment."
         if speak: speak(msg)
         return msg
     except ValueError as e:
@@ -562,7 +562,7 @@ def _build_project(
                 break
 
     if not file_codes:
-        msg = "I could not write any project files, sir."
+        msg = "I could not write any project files."
         if speak: speak(msg)
         return msg
 
@@ -585,7 +585,7 @@ def _build_project(
 
         if not _has_error(last_output, run_command):
             msg = (
-                f"Project '{proj_name}' is working, sir. "
+                f"Project '{proj_name}' is working. "
                 f"Built in {attempt} attempt{'s' if attempt > 1 else ''}. "
                 f"Saved to: {project_dir}"
             )
@@ -628,7 +628,7 @@ def _build_project(
             log(f"Fix step failed: {e}")
 
     msg = (
-        f"I couldn't fully fix '{proj_name}' after {MAX_FIX_ATTEMPTS} attempts, sir. "
+        f"I couldn't fully fix '{proj_name}' after {MAX_FIX_ATTEMPTS} attempts. "
         f"Project is saved at {project_dir} — open it in VSCode and check manually."
     )
     if speak: speak(msg)
@@ -795,13 +795,13 @@ def _refusal(folder: Path) -> str:
     """Why this folder must not be handed to a model to rewrite, or ''."""
     home = Path.home().resolve()
     if folder == home or folder.parent == folder:
-        return "That is your whole home folder or a drive — pick a project folder inside it, sir."
+        return "That is your whole home folder or a drive — pick a project folder inside it."
     low = str(folder).lower().replace("\\", "/")
     for bad in ("/windows", "/program files", "/programdata", "/usr/", "/system/"):
         if bad in low + "/":
-            return "That is a system folder, sir — I will not let a model rewrite it."
+            return "That is a system folder — I will not let a model rewrite it."
     if folder in {(home / n).resolve() for n in ("Desktop", "Documents", "Downloads")}:
-        return "That is a whole personal folder, sir — pick the project folder inside it."
+        return "That is a whole personal folder — pick the project folder inside it."
     return ""
 
 
@@ -1285,7 +1285,7 @@ def _improve_folder(folder: Path, instruction: str, player=None) -> str:
     _update("reading")
     tree, texts, outlines = _scan(folder)
     if not texts:
-        return f"I found no readable source files in '{folder.name}', sir."
+        return f"I found no readable source files in '{folder.name}'."
     _log(player, f"Read {len(texts)} of {len(tree)} files"
                  + (f", outlined {len(outlines)} large ones." if outlines else "."))
     context = _context(tree, texts, _CONTEXT_CHARS, outlines)
@@ -1327,7 +1327,7 @@ def _improve_folder(folder: Path, instruction: str, player=None) -> str:
     try:
         plan = _plan_changes(folder, instruction, context)
     except Exception as e:
-        return f"Planning failed, sir: {str(e)[:200]}"
+        return f"Planning failed: {str(e)[:200]}"
 
     from core.code_checks import Protection
     protection = Protection(folder)
@@ -1354,7 +1354,7 @@ def _improve_folder(folder: Path, instruction: str, player=None) -> str:
     plan["changes"] = changes
     summary = str(plan.get("summary") or "").strip()
     if not changes:
-        return summary or "I could not work out a change to make, sir."
+        return summary or "I could not work out a change to make."
     with _state_lock:
         if _JOB:                  # absent when called outside a background job
             _JOB["files"] = {c["path"]: {"action": c["action"],
@@ -1403,7 +1403,7 @@ def _improve_folder(folder: Path, instruction: str, player=None) -> str:
         _update(file=rel, file_state="done")
 
     if not written:
-        return ("I planned the change but could not write any of it, sir. "
+        return ("I planned the change but could not write any of it. "
                 "Nothing in the folder was touched.")
 
     # Check that the files fit each other, then that each one parses.
@@ -1526,13 +1526,13 @@ def _start_improve(folder_raw: str, instruction: str, speak=None, player=None) -
     global _job_name
     folder = _resolve_folder(folder_raw)
     if folder is None:
-        return ("I need a project folder for that, sir — drop one into the upload "
+        return ("I need a project folder for that — drop one into the upload "
                 "box, or tell me its path.")
     why = _refusal(folder)
     if why:
         return why
     if not _job_lock.acquire(blocking=False):
-        return f"I am still working on '{_job_name}', sir. One folder at a time."
+        return f"I am still working on '{_job_name}'. One folder at a time."
     _job_name = folder.name
 
     who = _coding_provider().partition("@")[2] or "the coding model"
@@ -1586,7 +1586,7 @@ def _start_build(description: str, language: str, project_name: str,
     """A new project, built in the background like a folder job."""
     global _job_name
     if not _job_lock.acquire(blocking=False):
-        return f"I am still working on '{_job_name}', sir. One job at a time."
+        return f"I am still working on '{_job_name}'. One job at a time."
     name = re.sub(r"[^\w\-]", "_", project_name) if project_name else "new project"
     _job_name = name
     who = _coding_provider().partition("@")[2] or "the coding model"
@@ -1611,14 +1611,14 @@ def dev_agent(
         return _status_report()
     if mode == "improve" or (folder and mode != "build"):
         if not description:
-            return "Tell me what to change in the folder, sir."
+            return "Tell me what to change in the folder."
         return _start_improve(folder, description, speak=speak, player=player)
     language     = p.get("language", "python").strip()
     project_name = p.get("project_name", "").strip()
     timeout      = int(p.get("timeout", 30))
 
     if not description:
-        return "Please describe the project you want me to build, sir."
+        return "Please describe the project you want me to build."
 
     return _start_build(description, language, project_name, timeout,
                         speak=speak, player=player)
