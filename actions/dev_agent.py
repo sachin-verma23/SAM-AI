@@ -641,14 +641,14 @@ def _build_project(
 #     mistake that is not cheap to undo, so the plan cannot ask for it.
 #   * Run the project. A folder somebody hands over may be a server, a GUI or a
 #     script that sends email. What IS run, in a separate process: changed
-#     modules are imported, and in a JARVIS project each changed plugin is
+#     modules are imported, and in a SAM project each changed plugin is
 #     called the way the app calls it — unless its code can act on the world
 #     (send, delete, launch), in which case it is only loaded and validated.
 #     See core/code_checks.py.
 #
 # WHAT IT READS FIRST
 #   The project's own rules (AGENTS.md, CLAUDE.md or CONTRIBUTING.md) and, for
-#   JARVIS itself, the thread-safe `player` methods read out of ui.py. Without
+#   SAM itself, the thread-safe `player` methods read out of ui.py. Without
 #   them a model writes code that is valid and wrong for this app — widgets
 #   built off the Qt thread, a separate window instead of the quiz board.
 #

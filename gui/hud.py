@@ -332,7 +332,7 @@ class HudCanvas(QWidget):
         dt = now - self._step_t
         self._step_t = now
         # Integrated, not derived from absolute time: multiplying wall-clock by
-        # a rate that changes with state jumps the rings the instant JARVIS
+        # a rate that changes with state jumps the rings the instant SAM
         # starts talking. Same lesson the head's sway taught.
         self._core_phase += min(0.10, max(0.0, dt))
 

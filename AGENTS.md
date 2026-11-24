@@ -1,4 +1,4 @@
-# Rules for coding agents working on JARVIS
+# Rules for coding agents working on SAM
 
 The built-in coding agent (`actions/dev_agent.py`) reads this file before every
 change it makes to this project, and so should any other agent or contributor.

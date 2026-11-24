@@ -368,14 +368,14 @@ class FileDropZone(QWidget):
         chosen = menu.exec(QCursor.pos())
         if chosen is pick_dir:
             path = QFileDialog.getExistingDirectory(
-                self, "Select a project folder for JARVIS", str(Path.home()))
+                self, "Select a project folder for SAM", str(Path.home()))
             if path:
                 self._set_file(path)
             return
         if chosen is not pick_file:
             return
         path, _ = QFileDialog.getOpenFileName(
-            self, "Select a file for JARVIS", str(Path.home()),
+            self, "Select a file for SAM", str(Path.home()),
             "All Files (*.*);;"
             "Images (*.jpg *.jpeg *.png *.gif *.webp *.bmp *.svg);;"
             "Documents (*.pdf *.docx *.txt *.md *.pptx);;"

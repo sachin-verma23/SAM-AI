@@ -1,7 +1,7 @@
 """
 Loads a project's changed Python code in a throwaway process, under the
 project's own interpreter, and prints one JSON report. Works for any project;
-the JARVIS profile adds running changed plugins the way the app runs them.
+the SAM profile adds running changed plugins the way the app runs them.
 Started by core/code_checks.py — never imported by the app.
 
     python _smoke_harness.py <project folder> <json: {"imports": [...], "plugins": [...]}>
@@ -114,7 +114,7 @@ class Player:
 
 
 def main() -> None:
-    # The JARVIS profile recreates the app's arrangement: one QApplication on
+    # The SAM profile recreates the app's arrangement: one QApplication on
     # this thread, model calls stubbed. Any other project gets neither — its
     # own `core` package, if it has one, is not ours to import.
     app = None

@@ -108,11 +108,38 @@ def test_error_classification() -> None:
     check(not main._is_network_error(ValueError("x")), "an ordinary bug is not a network error")
 
 
+# ── Phase 1 ──────────────────────────────────────────────────────────────────
+
+def test_rebrand() -> None:
+    section("Everything the user sees is called SAM")
+    import re, subprocess
+    from gui import theme
+    from memory import config_manager as cm
+    check(theme.APP_VERSION.startswith("SAM"), "app version is SAM")
+    check(theme.APP_OWNER == "Sachin Verma", "owner is Sachin Verma")
+    check("FatihMakes" in theme.APP_BASED_ON, "the original author is credited (licence)")
+    real = cm.CONFIG_FILE
+    with tempfile.TemporaryDirectory() as td:
+        cm.CONFIG_FILE = Path(td) / "api_keys.json"
+        try:
+            check(cm.get_assistant_name() == "SAM", "default assistant name is SAM")
+        finally:
+            cm.CONFIG_FILE = real
+    files = subprocess.run(["git", "ls-files", "*.py", "*.html", "*.txt"], cwd=ROOT,
+                           capture_output=True, text=True).stdout.split()
+    left = [f for f in files if f != "tests/sam_tests.py"
+            and re.search(r"JARVIS", (ROOT / f).read_text(encoding="utf-8"))]
+    check(not left, f"no 'JARVIS' left in code or pages ({', '.join(left) or 'none'})")
+    from gui.window import MainWindow
+    check(MainWindow._subtitle("SAM").endswith("Sachin Verma"), "header subtitle names the owner")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
     test_dashboard_off_by_default,
     test_error_classification,
+    test_rebrand,
 ]
 
 
