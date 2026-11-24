@@ -184,8 +184,15 @@ class ProvidersOverlay(_HudOverlay):
             "Your choice of hearing, thinking and speaking. Can run entirely on "
             "this computer, with nothing leaving it. Slower: 1.5 to 4 seconds.",
             "pipeline")
+        # SAM: Gemini while online, MY OWN SETUP while offline.
+        self._card_auto = self._mode_card(
+            "⇄  AUTO (SAM)",
+            "Gemini Live while the internet works; your own setup below takes "
+            "over by itself when it does not, and hands back when it returns.",
+            "auto")
         cards.addWidget(self._card_gemini)
         cards.addWidget(self._card_local)
+        cards.addWidget(self._card_auto)
         outer.addLayout(cards)
 
         # ── Body ────────────────────────────────────────────────────────────
@@ -270,7 +277,7 @@ class ProvidersOverlay(_HudOverlay):
         return b
 
     def _refresh_cards(self) -> None:
-        for card in (self._card_gemini, self._card_local):
+        for card in (self._card_gemini, self._card_local, self._card_auto):
             on = card.property("modeValue") == self._mode
             card.setChecked(on)
             card.setStyleSheet(f"""
@@ -600,7 +607,7 @@ class ProvidersOverlay(_HudOverlay):
         self._edits.clear()
         self._status.clear()
 
-        if self._mode == "pipeline":
+        if self._mode in ("pipeline", "auto"):
             for slot, num, name, what in self._SLOTS:
                 self._body_lay.addWidget(self._slot_box(slot, num, name, what))
         else:
@@ -863,7 +870,7 @@ class ProvidersOverlay(_HudOverlay):
         # and then there is nothing more to fill in. In Gemini mode there IS no
         # ② section, so a service picked here gets its own form, right here.
         if sid:
-            if self._mode == "pipeline" and sid == self._pipe.get("llm"):
+            if self._mode in ("pipeline", "auto") and sid == self._pipe.get("llm"):
                 lay.addWidget(self._label(
                     "Uses the model you chose for ② THINKING.", 7, C.TEXT_DIM))
             else:
@@ -919,7 +926,7 @@ class ProvidersOverlay(_HudOverlay):
         elif sid == self._sidecar:
             lay.addWidget(self._label(
                 "Uses the settings under BACKGROUND REQUESTS.", 7, C.TEXT_DIM))
-        elif self._mode == "pipeline" and sid == self._pipe.get("llm"):
+        elif self._mode in ("pipeline", "auto") and sid == self._pipe.get("llm"):
             lay.addWidget(self._label(
                 "Uses the model you chose for ② THINKING.", 7, C.TEXT_DIM))
         else:
@@ -945,7 +952,7 @@ class ProvidersOverlay(_HudOverlay):
         QTimer.singleShot(0, self._rebuild_body)
 
     def _update_footer(self) -> None:
-        if self._mode != "pipeline":
+        if self._mode not in ("pipeline", "auto"):
             self._footer.setText(
                 "Gemini Live. Nothing on this panel changes the conversation.")
             return
@@ -1176,7 +1183,7 @@ class ProvidersOverlay(_HudOverlay):
                                            get_provider_mode)
         mode, pipe = get_provider_mode(), dict(get_pipeline())
         used = {sid: get_provider_config(sid) for sid in pipe.values() if sid} \
-            if mode == "pipeline" else {}
+            if mode in ("pipeline", "auto") else {}
         return json.dumps([mode, pipe, used], sort_keys=True, default=str)
 
 

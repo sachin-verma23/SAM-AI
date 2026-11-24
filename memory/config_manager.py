@@ -485,6 +485,10 @@ def save_plugin_enabled(plugin_name: str, enabled: bool) -> None:
 # whole basis of the claim that the folder costs nothing when unused.
 PROVIDER_MODE_GEMINI = "gemini"      # the conversation runs on the Live API
 PROVIDER_MODE_PIPELINE = "pipeline"  # STT -> LLM -> TTS, assembled from providers
+# SAM: Gemini Live while online, the local pipeline while offline (or when
+# every Live model is out of quota). Needs a pipeline to be configured.
+PROVIDER_MODE_AUTO = "auto"
+PROVIDER_MODES = (PROVIDER_MODE_GEMINI, PROVIDER_MODE_PIPELINE, PROVIDER_MODE_AUTO)
 
 
 def _upgrade_ids(block: dict) -> dict:
@@ -539,8 +543,7 @@ def get_providers() -> dict:
 def get_provider_mode() -> str:
     """Which engine holds the conversation. Defaults to Gemini Live."""
     mode = str(get_providers().get("mode", "") or "").strip().lower()
-    return mode if mode in (PROVIDER_MODE_GEMINI, PROVIDER_MODE_PIPELINE) \
-        else PROVIDER_MODE_GEMINI
+    return mode if mode in PROVIDER_MODES else PROVIDER_MODE_GEMINI
 
 
 def get_provider_config(provider_id: str) -> dict:
@@ -674,8 +677,7 @@ def save_providers(mode: str = None, pipeline: dict = None, creds: dict = None,
 
     if mode is not None:
         m = str(mode).strip().lower()
-        block["mode"] = m if m in (PROVIDER_MODE_GEMINI,
-                                   PROVIDER_MODE_PIPELINE) else PROVIDER_MODE_GEMINI
+        block["mode"] = m if m in PROVIDER_MODES else PROVIDER_MODE_GEMINI
     if pipeline is not None:
         current = block.get("pipeline")
         current = dict(current) if isinstance(current, dict) else {}

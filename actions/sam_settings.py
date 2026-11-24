@@ -22,9 +22,16 @@ _ALIASES = {
 }
 
 
+_MODES = {
+    "auto": "auto", "automatic": "auto",
+    "online": "gemini", "gemini": "gemini", "cloud": "gemini",
+    "offline": "pipeline", "local": "pipeline", "ollama": "pipeline", "pipeline": "pipeline",
+}
+
+
 def _settings_summary() -> str:
-    from memory.config_manager import get_preferred_language
-    return f"language={get_preferred_language()}"
+    from memory.config_manager import get_preferred_language, get_provider_mode
+    return f"language={get_preferred_language()}, engine_mode={get_provider_mode()}"
 
 
 def sam_settings(parameters: dict, player=None) -> str:
@@ -54,6 +61,27 @@ def sam_settings(parameters: dict, player=None) -> str:
             return outcome.done("sam_settings", language=mode,
                                 note="saved; applies from the next session")
 
+        if action == "set_mode":
+            raw = str(parameters.get("value") or "").strip().lower()
+            mode = _MODES.get(raw)
+            if mode is None:
+                return outcome.ask("sam_settings",
+                                   "which mode: auto, online (Gemini) or offline (local AI)")
+            from memory.config_manager import (get_pipeline, get_provider_mode,
+                                               save_providers)
+            if mode in ("pipeline", "auto") and not get_pipeline().get("llm"):
+                return outcome.failed(
+                    "sam_settings", "no local AI is set up yet — open ENGINE & "
+                    "PROVIDERS and fill in MY OWN SETUP first")
+            if get_provider_mode() == mode:
+                return outcome.done("sam_settings", mode=mode, changed=False)
+            save_providers(mode=mode)
+            reconnect = getattr(player, "request_reconnect", None) if player else None
+            if callable(reconnect):
+                reconnect(reason="new engine mode", fresh=True)
+            return outcome.done("sam_settings", mode=mode,
+                                note="saved; the conversation restarts in a moment")
+
         return outcome.failed("sam_settings", f"unknown action '{action}'")
     except Exception as e:
         return outcome.failed("sam_settings", f"could not change the setting: {e}")
@@ -65,16 +93,20 @@ TOOL = {
         "SAM's own preferences. action='set_language' with value auto | hindi | "
         "english | hinglish when the user asks you to always speak a language, or to "
         "go back to matching theirs ('ab se Hindi mein baat karo', 'talk in Hinglish'). "
-        "action='get' to report the current settings. Before set_language, say one "
-        "short sentence in the NEW language that you are switching, because the "
-        "conversation restarts right after."
+        "action='set_mode' with value auto | online | offline when the user asks to use "
+        "the local/offline AI, Gemini/online only, or to switch automatically "
+        "('offline mode on karo', 'auto mode'). "
+        "action='get' to report the current settings. Before set_language or set_mode, "
+        "say one short sentence that you are switching, because the conversation "
+        "restarts right after."
     ),
     "parameters": {
         "type": "OBJECT",
         "properties": {
-            "action": {"type": "STRING", "description": "set_language | get"},
+            "action": {"type": "STRING", "description": "set_language | set_mode | get"},
             "value": {"type": "STRING",
-                      "description": "For set_language: auto | hindi | english | hinglish"},
+                      "description": "set_language: auto | hindi | english | hinglish. "
+                                     "set_mode: auto | online | offline"},
         },
         "required": ["action"],
     },

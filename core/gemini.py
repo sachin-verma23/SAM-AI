@@ -748,6 +748,20 @@ def call(contents, tier: str = FAST, config=None,
         rungs = (chosen,) + tuple(r for r in rungs if r != chosen)
         ladder = (chosen,) + tuple(m for m in ladder if m != chosen)
 
+    # SAM: offline, every Gemini rung would spend its full timeout failing
+    # (ten seconds each, eleven rungs). Go straight to the configured local
+    # provider instead, or give up at once when there is none.
+    try:
+        from core import connectivity
+        offline = not connectivity.is_online()
+    except Exception:
+        offline = False
+    if offline:
+        if not rungs:
+            print("[Gemini] offline and no local provider is configured")
+            return None
+        ladder = rungs
+
     resolved_key = key or api_key()
     if not resolved_key:
         # A provider does not need a Gemini key. Before this, a missing key

@@ -348,6 +348,18 @@ _LANGUAGE_RULES = {
 }
 
 
+# Offline replies are read by Piper: the Hindi voice reads Devanagari well and
+# Latin-script Hinglish badly (measured: "Desktop par ek naya folder bana do"
+# came out unintelligible), so local replies in Hindi or Hinglish are written
+# in Devanagari, English words included.
+_LOCAL_VOICE_NOTE = (
+    "[OFFLINE VOICE]\n"
+    "Your reply is read aloud by a local voice. When you answer in Hindi or "
+    "Hinglish, write it in Devanagari script, English words included (for "
+    "example 'वॉल्यूम 50 परसेंट कर दिया है'). English replies stay in Latin "
+    "script. Keep replies short: one to three sentences.\n\n")
+
+
 def _language_block() -> str:
     """The [LANGUAGE PREFERENCE] block for the system prompt. It overrides the
     generic [LANGUAGE] section of prompt.txt where the two differ."""
@@ -1515,6 +1527,8 @@ class JarvisLive:
             f"{_addr}\n\n"
         )
         identity_ctx += _language_block()
+        if self._engine_caps is not None:
+            identity_ctx += _LOCAL_VOICE_NOTE
 
         # Everything the model is told about *itself* is derived here, not
         # written into prompt.txt: the name comes from config, the platform from
@@ -2693,7 +2707,17 @@ class JarvisLive:
         the same ones the engine gets a moment later, and a misconfiguration is
         reported while there is still a Gemini session to fall back to.
         """
-        if self._engine_mode() != "pipeline":
+        mode = self._engine_mode()
+        if mode == "auto":
+            use_local, why = self._auto_wants_local()
+            if not use_local:
+                self._engine_label = "online"
+                return None
+            if why != getattr(self, "_auto_reason_said", ""):
+                self._auto_reason_said = why
+                self.ui.write_log(f"SYS: {why} — using the local AI.")
+        elif mode != "pipeline":
+            self._engine_label = "online"
             return None
         try:
             from memory.config_manager import get_pipeline, get_provider_config
@@ -2729,6 +2753,7 @@ class JarvisLive:
 
             caps = dict(getattr(llm, "caps", {}) or {})
             caps["audio_out"] = bool(str(pipe.get("tts") or "").strip())
+            self._engine_label = "offline"
             return caps
         except Exception as e:
             # A local engine that will not start must never mean no assistant.
@@ -2742,6 +2767,54 @@ class JarvisLive:
                 self.ui.write_log(note)
             print(f"[SAM] Pipeline engine unavailable: {e}")
             return None
+
+    def _auto_wants_local(self) -> tuple[bool, str]:
+        """Auto mode: should this connect use the local pipeline? (yes?, why)"""
+        try:
+            from core import connectivity
+            if not connectivity.is_online(max_age=0):
+                return True, "No internet"
+        except Exception:
+            pass
+        if not _gemini_usable():
+            return True, "No Gemini key"
+        try:
+            if all(_gemini._cooling(m) for m in _gemini.LIVE_MODELS):
+                return True, "Every Gemini Live model is out of quota"
+        except Exception:
+            pass
+        return False, ""
+
+    async def _watch_connectivity(self) -> None:
+        """Auto mode only: switch engines when the internet goes or comes back.
+
+        Going offline is acted on after one failed probe, because the Live
+        session is already dying. Coming back needs two good probes in a row
+        (connectivity.stable_online) so a flickering connection does not
+        bounce the conversation back and forth."""
+        from core import connectivity
+        while True:
+            await asyncio.sleep(15)
+            try:
+                if self._engine_caps is None:                 # on Gemini
+                    online = await asyncio.to_thread(connectivity.check_now)
+                    if not online:
+                        self.ui.write_log("SYS: Internet lost — switching to the local AI.")
+                        self.request_reconnect(keep_context=False, reason="offline mode")
+                        return
+                else:                                         # on the local pipeline
+                    if not _gemini_usable():
+                        continue
+                    if await asyncio.to_thread(connectivity.stable_online):
+                        with self._speaking_lock:
+                            busy = self._is_speaking
+                        if busy:
+                            continue
+                        self.ui.write_log("SYS: Back online — switching to Gemini.")
+                        self.request_reconnect(keep_context=False, reason="online mode")
+                        return
+            except Exception as e:
+                print(f"[Auto] connectivity watch: {e}")
 
     @asynccontextmanager
     async def _open_session(self, live_model: str, config):
@@ -2975,6 +3048,8 @@ class JarvisLive:
                         tg.create_task(self._run_background_monitor())
                         tg.create_task(self._run_proactive_mode())
                     tg.create_task(self._run_sleep_watch())
+                    if self._engine_mode() == "auto":
+                        tg.create_task(self._watch_connectivity())
                     if self._dashboard:
                         tg.create_task(self._relay_phone_audio())
 
@@ -3105,7 +3180,11 @@ class JarvisLive:
                     "TimeoutError", "timed out", "getaddrinfo", "CancelledError",
                     "ConnectionRefusedError", "OSError", "Cannot connect",
                 ))
-                if is_net_err:
+                if is_net_err and self._engine_mode() == "auto":
+                    # Auto mode: do not wait — the next attempt picks the local AI.
+                    self._conn_backoff = 1
+                    self.ui.write_log("NET: Gemini unreachable — trying the local AI.")
+                elif is_net_err:
                     _conn_backoff = min(getattr(self, "_conn_backoff", 3) * 2, 60)
                     self._conn_backoff = _conn_backoff
                     self.ui.write_log(

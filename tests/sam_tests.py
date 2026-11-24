@@ -186,6 +186,48 @@ def test_language_preference() -> None:
     check('"aap"' in prompt, "the base prompt uses the respectful 'aap'")
 
 
+# ── Phase 4 ──────────────────────────────────────────────────────────────────
+
+def test_auto_switching() -> None:
+    section("Online/offline automatic switching")
+    import time as _t
+    from core import connectivity, gemini
+    import main
+    try:
+        connectivity.force(False)
+        with _TempConfig() as cm:
+            cm.CONFIG_FILE.write_text(json.dumps({"gemini_api_key": "x" * 39}), encoding="utf-8")
+            start = _t.monotonic()
+            out = gemini.call("hello", tier=gemini.FAST)
+            check(out is None and _t.monotonic() - start < 2.0,
+                  "offline with no local AI gives up at once instead of timing out on every model")
+            cm.save_providers(mode="auto")
+            check(cm.get_provider_mode() == "auto", "'auto' is a stored engine mode")
+
+            class _UI:
+                def write_log(self, *_): pass
+            j = main.JarvisLive.__new__(main.JarvisLive)
+            j.ui = _UI()
+            want, why = j._auto_wants_local()
+            check(want and why == "No internet", "offline: auto mode picks the local AI")
+            connectivity.force(True)
+            want, why = j._auto_wants_local()
+            check(not want, "online with a key: auto mode picks Gemini")
+            cm.CONFIG_FILE.write_text(json.dumps({"providers": {"mode": "auto"}}), encoding="utf-8")
+            want, why = j._auto_wants_local()
+            check(want and why == "No Gemini key", "no Gemini key: auto mode picks the local AI")
+
+            from actions.sam_settings import sam_settings
+            out = sam_settings({"action": "set_mode", "value": "offline"})
+            check("status=failed" in out, "offline mode is refused until a local AI is set up")
+            cm.save_providers(pipeline={"llm": "openai_compat@ollama"})
+            out = sam_settings({"action": "set_mode", "value": "online"})
+            check("status=done" in out and cm.get_provider_mode() == "gemini", "voice can switch to online")
+    finally:
+        connectivity.force(None)
+    check(isinstance(connectivity.is_online(), bool), "a real connectivity probe answers")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -193,6 +235,7 @@ TESTS = [
     test_error_classification,
     test_rebrand,
     test_language_preference,
+    test_auto_switching,
 ]
 
 
