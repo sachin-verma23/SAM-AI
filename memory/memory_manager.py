@@ -1,7 +1,9 @@
 import json
 import re
 from datetime import datetime
-from threading import Lock
+from threading import RLock
+import os
+import time
 from pathlib import Path
 import sys
 
@@ -14,7 +16,7 @@ def get_base_dir() -> Path:
 
 BASE_DIR         = get_base_dir()
 MEMORY_PATH      = BASE_DIR / "memory" / "long_term.json"
-_lock            = Lock()
+_lock            = RLock()   # re-entrant: update_memory holds it across load+save
 MAX_VALUE_LENGTH = 380
 
 # ── Why there are two very different numbers here ────────────────────────────
@@ -54,22 +56,63 @@ def _empty_memory() -> dict:
         "notes":         {},
     }
 
+def _write_atomic(memory: dict) -> None:
+    """Write long_term.json through a temp file and a rename.
+
+    A crash or power cut mid-write leaves the previous file intact instead of
+    half a file — which load_memory() would otherwise read as "nothing stored",
+    and the next save would then make permanent."""
+    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
+    tmp = MEMORY_PATH.with_name(MEMORY_PATH.name + ".tmp")
+    tmp.write_text(json.dumps(memory, indent=2, ensure_ascii=False), encoding="utf-8")
+    for attempt in range(20):
+        try:
+            os.replace(tmp, MEMORY_PATH)
+            return
+        except PermissionError:
+            # Windows: an antivirus scan or a reader can hold the file briefly.
+            if attempt == 19:
+                raise
+            time.sleep(0.05)
+
+
+def _set_aside_broken() -> None:
+    """Keep an unreadable memory file instead of letting the next save erase it."""
+    try:
+        broken = MEMORY_PATH.with_name(
+            f"{MEMORY_PATH.name}.broken-{time.strftime('%Y%m%d-%H%M%S')}")
+        os.replace(MEMORY_PATH, broken)
+        print(f"[Memory] ⚠️ long_term.json could not be read — kept as {broken.name}")
+    except Exception as e:
+        print(f"[Memory] ⚠️ could not set aside the unreadable memory file: {e}")
+
+
 def load_memory() -> dict:
     if not MEMORY_PATH.exists():
         return _empty_memory()
     with _lock:
-        try:
-            data = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
+        last = None
+        for _ in range(3):
+            try:
+                data = json.loads(MEMORY_PATH.read_text(encoding="utf-8"))
+            except OSError as e:          # locked for a moment — retry
+                last = e
+                time.sleep(0.05)
+                continue
+            except ValueError as e:       # not JSON — keep it, start empty
+                print(f"[Memory] ⚠️ Load error: {e}")
+                _set_aside_broken()
+                return _empty_memory()
             if isinstance(data, dict):
                 base = _empty_memory()
                 for key in base:
                     if key not in data:
                         data[key] = {}
                 return data
+            _set_aside_broken()
             return _empty_memory()
-        except Exception as e:
-            print(f"[Memory] ⚠️ Load error: {e}")
-            return _empty_memory()
+        print(f"[Memory] ⚠️ Load error: {last}")
+        return _empty_memory()
 
 def _all_entries(memory: dict) -> list[tuple]:
     entries = []
@@ -118,13 +161,9 @@ def _trim_to_limit(memory: dict) -> dict:
 def save_memory(memory: dict) -> None:
     if not isinstance(memory, dict):
         return
-    memory = _trim_to_limit(memory)
-    MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
     with _lock:
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+        memory = _trim_to_limit(memory)
+        _write_atomic(memory)
 
 
 def _truncate_value(val: str) -> str:
@@ -159,11 +198,14 @@ def _recursive_update(target: dict, updates: dict) -> bool:
 def update_memory(memory_update: dict) -> dict:
     if not isinstance(memory_update, dict) or not memory_update:
         return load_memory()
-    memory = load_memory()
-    if _recursive_update(memory, memory_update):
-        save_memory(memory)
-        print(f"[Memory] 💾 Saved: {list(memory_update.keys())}")
-    return memory
+    # One lock across read-modify-write, so two writers at the same moment
+    # (a save_memory call racing the shutdown summary) cannot lose an update.
+    with _lock:
+        memory = load_memory()
+        if _recursive_update(memory, memory_update):
+            save_memory(memory)
+            print(f"[Memory] 💾 Saved: {list(memory_update.keys())}")
+        return memory
 
 def _entry_value(entry) -> str:
     """Accept both the {'value': ..., 'updated': ...} shape and a bare string,
@@ -410,13 +452,14 @@ def remember(key: str, value: str, category: str = "notes") -> str:
 
 
 def forget(key: str, category: str = "notes") -> str:
-    memory = load_memory()
-    cat    = memory.get(category, {})
-    if key in cat:
-        del cat[key]
-        memory[category] = cat
-        save_memory(memory)
-        return f"Forgotten: {category}/{key}"
+    with _lock:
+        memory = load_memory()
+        cat    = memory.get(category, {})
+        if key in cat:
+            del cat[key]
+            memory[category] = cat
+            save_memory(memory)
+            return f"Forgotten: {category}/{key}"
     return f"Not found: {category}/{key}"
 
 
@@ -433,6 +476,11 @@ def save_session_summary(summary: str, language: str = "") -> None:
     summary = (summary or "").strip()
     if not summary:
         return
+    with _lock:
+        _append_session(summary, language)
+
+
+def _append_session(summary: str, language: str) -> None:
     memory   = load_memory()
     sessions = memory.get("sessions", [])
     if not isinstance(sessions, list):
@@ -445,12 +493,7 @@ def save_session_summary(summary: str, language: str = "") -> None:
         entry["language"] = language
     sessions.append(entry)
     memory["sessions"] = sessions[-_SESSION_MAX:]
-    with _lock:
-        MEMORY_PATH.parent.mkdir(parents=True, exist_ok=True)
-        MEMORY_PATH.write_text(
-            json.dumps(memory, indent=2, ensure_ascii=False),
-            encoding="utf-8",
-        )
+    _write_atomic(memory)
     print(f"[Memory] 📝 Session saved ({entry['date']}): {summary[:60]}…")
 
 
@@ -469,10 +512,7 @@ def pop_last_session() -> dict | None:
                 return None
             entry = sessions.pop()          # remove the last entry
             memory["sessions"] = sessions
-            MEMORY_PATH.write_text(
-                json.dumps(memory, indent=2, ensure_ascii=False),
-                encoding="utf-8",
-            )
+            _write_atomic(memory)
             return entry
         except Exception as e:
             print(f"[Memory] ⚠️ pop_last_session error: {e}")

@@ -551,6 +551,18 @@ TOOL_DECLARATIONS = [
     },
 ]
 
+def _is_network_error(exc: BaseException) -> bool:
+    """True if `exc` (or anything inside an exception group) is a network
+    failure by TYPE. A bare TimeoutError() has an empty message, so matching
+    on the text alone missed it and the backoff never grew."""
+    if isinstance(exc, BaseExceptionGroup):
+        return any(_is_network_error(sub) for sub in exc.exceptions)
+    if isinstance(exc, (TimeoutError, ConnectionError, OSError, asyncio.TimeoutError)):
+        return True
+    return type(exc).__name__ in ("ConnectionClosedError", "ConnectionClosed",
+                                  "InvalidStatus", "ConnectError", "ReadTimeout")
+
+
 class _ReconnectSignal(Exception):
     """Raised inside the session TaskGroup to force a clean, voluntary reconnect
     (e.g. the user picked a new voice — the voice is fixed at connect time, so
@@ -1194,9 +1206,49 @@ class JarvisLive:
         )
         raise _ReconnectSignal(keep_context=keep)
 
+    def _start_dashboard(self) -> bool:
+        """Create the phone dashboard and schedule it on the event loop.
+
+        Thread-safe: called from run() at startup when "dashboard_enabled" is
+        on, or from the Qt thread the first time REMOTE is pressed. The
+        dashboard listens on the whole local network, so by default it does
+        not exist until somebody asks for it."""
+        if self._dashboard is not None:
+            return True
+        loop = getattr(self, "_loop", None)
+        if loop is None:
+            return False
+        try:
+            from dashboard.server import DashboardServer
+            dash = DashboardServer()
+            dash.set_connect_callback(self._on_phone_connected)
+        except Exception as e:
+            print(f"[Dashboard] Disabled: {e}")
+            return False
+        self._dashboard = dash
+
+        async def _boot():
+            self._keep_task(asyncio.create_task(dash.serve()))
+            self._keep_task(asyncio.create_task(self._process_dashboard_commands()))
+
+        try:
+            if threading.current_thread() is getattr(self, "_loop_thread", None):
+                asyncio.ensure_future(_boot())
+            else:
+                asyncio.run_coroutine_threadsafe(_boot(), loop)
+        except Exception as e:
+            print(f"[Dashboard] could not start: {e}")
+            self._dashboard = None
+            return False
+        # The phone-audio relay is a per-session task: rebuild the session
+        # (conversation kept) so the next one includes it.
+        if self.session is not None:
+            self.request_reconnect(keep_context=True, reason="phone dashboard")
+        return True
+
     def _make_remote_key(self):
         """Called from Qt main thread when user presses Remote Control."""
-        if self._dashboard is None:
+        if self._dashboard is None and not self._start_dashboard():
             self.ui.write_log(
                 "SYS: Dashboard unavailable. "
                 "Run: pip install fastapi \"uvicorn[standard]\" cryptography"
@@ -2717,17 +2769,16 @@ class JarvisLive:
         # for host-API enumeration on the Qt thread.
         audio_devices.prefetch()
 
-        # Start dashboard (optional — needs: pip install fastapi "uvicorn[standard]" cryptography)
+        # Phone dashboard: started here only when "dashboard_enabled" is on.
+        # Otherwise it starts the first time REMOTE is pressed (_make_remote_key),
+        # so nothing listens on the local network unless the user asked for it.
+        self._loop_thread = threading.current_thread()
         try:
-            from dashboard.server import DashboardServer
-            self._dashboard = DashboardServer()
-            self._dashboard.set_connect_callback(self._on_phone_connected)
-            self._keep_task(asyncio.create_task(self._dashboard.serve()))
-            # Runs for the whole lifetime, not just inside an active session
-            self._keep_task(asyncio.create_task(self._process_dashboard_commands()))
+            from memory.config_manager import get_dashboard_enabled
+            if get_dashboard_enabled():
+                self._start_dashboard()
         except Exception as e:
             print(f"[Dashboard] Disabled: {e}")
-            self._dashboard = None
 
         while True:
             try:
@@ -2988,7 +3039,10 @@ class JarvisLive:
                     continue
 
                 # Invalid API key — stop hammering the API, prompt re-configuration
-                if "API key not valid" in err_str or "1007" in err_str:
+                # "1007" used to count as a bad key here, but 1007 is the generic
+                # WebSocket "invalid payload" close code (an unsupported field
+                # produces it too), which opened the key screen for no reason.
+                if _gemini.is_key_error(err_str):
                     self.ui.write_log("ERR: API key invalid — please re-enter your key.")
                     self.ui.set_state("SLEEPING")
                     self.ui.prompt_reconfig()
@@ -2999,7 +3053,7 @@ class JarvisLive:
                     continue
 
                 # Network / timeout errors — log clearly and back off
-                is_net_err = any(k in err_str for k in (
+                is_net_err = _is_network_error(e) or any(k in err_str for k in (
                     "TimeoutError", "timed out", "getaddrinfo", "CancelledError",
                     "ConnectionRefusedError", "OSError", "Cannot connect",
                 ))

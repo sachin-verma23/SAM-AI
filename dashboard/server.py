@@ -50,8 +50,23 @@ STATIC_DIR  = Path(__file__).parent / "static"
 # So the port people reach for answers in the protocol they reach for it with,
 # and sends them one hop to the secure one. The QR code carries the secure URL
 # directly, so it never takes the hop.
-PORT        = 8000      # HTTP, redirects to SECURE_PORT
-SECURE_PORT = 8001      # HTTPS, the dashboard itself
+def _configured_port(default: int = 8765) -> int:
+    """SAM: the port comes from "dashboard_port" in config/api_keys.json.
+
+    The original 8000 is the default port of many dev servers (Laravel's
+    `php artisan serve`, Django, uvicorn), so it collided with them; 8765 is
+    rarely taken. HTTPS uses the next port up."""
+    try:
+        import json as _json
+        with open(BASE_DIR / "config" / "api_keys.json", encoding="utf-8") as f:
+            port = int(_json.load(f).get("dashboard_port", default))
+        return port if 1024 <= port <= 65534 else default
+    except Exception:
+        return default
+
+
+PORT        = _configured_port()   # HTTP, redirects to SECURE_PORT
+SECURE_PORT = PORT + 1             # HTTPS, the dashboard itself
 MAX_UPLOAD_MB = 500
 
 

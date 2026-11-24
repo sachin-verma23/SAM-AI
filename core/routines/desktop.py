@@ -6,8 +6,9 @@ The first time, the built-in routines are created from what the app did before
 Mark LVII, so nobody loses a morning briefing to an upgrade:
 
     opening      the startup briefing — on if the MORNING BRIEF switch was on
-    check-in     the proactive check-in after 15 quiet minutes, at most every 20
-    news-watch   the topic watch, every 30 minutes
+    check-in     the proactive check-in after 30 quiet minutes, at most hourly
+    news-watch   the topic watch, every 2 hours between 08:00 and 22:00
+    quiet hours  23:00-07:00 (nothing unprompted is said then)
 
 They stay routines from then on: switch them off, move the briefing to 08:30,
 change its news topic or the check-in's subjects, by voice or from the panel.
@@ -33,6 +34,15 @@ DEFAULT_FOCUSES = [
 ]
 
 
+# SAM defaults: speak unprompted less often, and never at night. The original
+# defaults (check-in after 15 idle minutes, news every 30 minutes, round the
+# clock, no quiet hours) were noisy and kept background work running all day.
+QUIET_CHECKIN_IDLE = 30        # minutes of silence before a check-in
+QUIET_CHECKIN_COOLDOWN = 60    # at most one check-in per hour
+QUIET_NEWS_EVERY = 120         # news-topic watch every 2 hours, 08:00-22:00
+DEFAULT_QUIET_HOURS = "23:00-07:00"
+
+
 def routines_path() -> Path:
     return _BASE / "memory" / "routines.json"
 
@@ -47,13 +57,17 @@ def seed_defaults(engine, brief_enabled: bool) -> None:
                    options={"news": True, "news_topic": "top world news today", "extra": ""})
     if engine.find_builtin("checkin") is None:
         engine.add(name="Check-in", kind="builtin", builtin="checkin",
-                   trigger={"type": "idle", "minutes": 15, "cooldown": 20}, system=True, quiet=True,
+                   trigger={"type": "idle", "minutes": QUIET_CHECKIN_IDLE,
+                            "cooldown": QUIET_CHECKIN_COOLDOWN}, system=True, quiet=True,
                    options={"focuses": list(DEFAULT_FOCUSES)})
     if engine.find_builtin("news_watch") is None:
         engine.add(name="News watch", kind="builtin", builtin="news_watch",
-                   trigger={"type": "time", "rule": {"type": "interval", "minutes": 30,
-                                                     "start": "00:00", "end": "23:59"}},
+                   trigger={"type": "time", "rule": {"type": "interval",
+                                                     "minutes": QUIET_NEWS_EVERY,
+                                                     "start": "08:00", "end": "22:00"}},
                    system=True, quiet=True)
+    if not engine.quiet_hours():
+        engine.set_quiet_hours(DEFAULT_QUIET_HOURS)
     engine.mark_seeded()
 
 

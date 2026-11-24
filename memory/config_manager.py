@@ -344,6 +344,20 @@ def save_brief_enabled(enabled: bool) -> None:
     _write_config(data)
 
 
+# ── SAM additions ────────────────────────────────────────────────────────────
+
+def get_dashboard_enabled() -> bool:
+    """Start the phone dashboard at launch? OFF by default.
+
+    The dashboard listens on the whole local network, so it is started only
+    when the user presses REMOTE (or turns this on to have it always ready)."""
+    return bool(load_api_keys().get("dashboard_enabled", False))
+
+
+def save_dashboard_enabled(enabled: bool) -> None:
+    _patch_config(dashboard_enabled=bool(enabled))
+
+
 # ── Audio devices ────────────────────────────────────────────────────────────
 # Stored as device NAMES, not sounddevice indices. Indices shift every time a
 # USB device is plugged in or removed, so a saved index silently starts pointing
