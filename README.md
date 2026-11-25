@@ -16,8 +16,11 @@ git clone https://github.com/sachin-verma23/SAM-AI.git
 cd SAM-AI
 py -m venv .venv
 .\.venv\Scripts\python.exe setup.py
+.\.venv\Scripts\python.exe setup_sam.py
 .\.venv\Scripts\python.exe main.py
 ```
+
+`setup_sam.py` installs everything else SAM uses — Ollama and the `llama3.2:3b` model, Whisper, the Hindi/English voices, the "Hey Sam" and gesture models — and writes the tuned offline + auto settings. It is safe to run again; finished steps are skipped. Options: `--yes` (no questions), `--skip-ollama`, `--skip-models`.
 
 On first launch, paste a free Gemini API key (from https://aistudio.google.com/apikey). It is saved locally in `config/api_keys.json`, which git ignores.
 
@@ -40,13 +43,9 @@ Self-tests (no network or key needed):
 | ✋ Gestures | Webcam hand gestures for media, volume and navigation (off by default) |
 | 📊 HUD | Animated assistant with live AI / internet / mic / camera / wake-word status |
 
-## Offline mode setup (one time)
+## Offline mode
 
-1. Install Ollama: `winget install Ollama.Ollama`
-2. Download the model: `ollama pull llama3.2:3b`
-3. In SAM: ⚙ → ENGINE & PROVIDERS → **AUTO (SAM)**, with Whisper (local, small), Ollama (llama3.2:3b) and Piper.
-
-On a 4-core laptop the offline model needs about a minute to warm up after a switch, then answers in 5–17 seconds. Online answers take about a second.
+`setup_sam.py` sets it up completely. On a 4-core laptop the offline model needs about a minute to warm up after a switch, then answers in 5–20 seconds. Online answers take about a second.
 
 ## Documentation
 

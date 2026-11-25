@@ -55,6 +55,7 @@ SAM is SAM customised for **Sachin Verma**. Everything below is new or changed; 
 | `actions/sam_settings.py` | Voice tool: `set_language`, `set_mode`, `set_lite`, `get` |
 | `actions/conversation_history.py` | Voice tool: search / recent / day of earlier conversations |
 | `actions/gesture_control.py` | Voice tool: gestures on / off / status |
+| `setup_sam.py` | One-command setup after `setup.py`: offline packages, Ollama + model, voices, Whisper, Hey Sam and gesture models, tuned offline/auto settings, final report |
 | `tests/sam_tests.py` | Self-test for every SAM change: `python -m tests.sam_tests` (89 checks) |
 | `models/` (git-ignored) | `vosk-model-small-en-in-0.4/` (36 MB) and `gesture_recognizer.task` (8 MB) |
 

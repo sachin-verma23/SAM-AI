@@ -426,6 +426,33 @@ def test_gestures() -> None:
     print("  INFO  ", g.missing() or "mediapipe, OpenCV and the model are all present")
 
 
+# ── setup_sam.py ─────────────────────────────────────────────────────────────
+
+def test_setup_script_on_a_fresh_install() -> None:
+    section("setup_sam.py on a laptop with no settings yet")
+    import importlib
+    setup_sam = importlib.import_module("setup_sam")
+    with _TempConfig() as cm:
+        setup_sam.RESULTS.clear()
+        setup_sam.write_settings("llama3.2:3b")
+        check(cm.get_provider_mode() == "auto", "engine mode becomes auto")
+        llm = cm.get_provider_config("openai_compat@ollama")
+        check(llm.get("tool_format") == "prompt" and llm.get("model") == "llama3.2:3b",
+              "the Ollama settings match the tuned laptop")
+        check(cm.get_pipeline() == {"stt": "whisper@local", "llm": "openai_compat@ollama",
+                                    "tts": "piper@piper"}, "the offline pipeline is complete")
+        data = json.loads(cm.CONFIG_FILE.read_text(encoding="utf-8"))
+        check("gemini_api_key" not in data and "os_system" not in data,
+              "no key is invented, so first launch still asks for it")
+        from gui import window
+        real = window._read_full_config
+        window._read_full_config = lambda: data
+        try:
+            check(window.MainWindow._check_config(None) is False, "the setup screen will still appear")
+        finally:
+            window._read_full_config = real
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -439,6 +466,7 @@ TESTS = [
     test_memory_edit_and_history,
     test_wake_word_hey_sam,
     test_gestures,
+    test_setup_script_on_a_fresh_install,
 ]
 
 
