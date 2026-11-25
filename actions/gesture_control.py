@@ -32,6 +32,9 @@ def gesture_control(parameters: dict, player=None) -> str:
             return outcome.failed("gesture_control", "the assistant is not running")
         result = toggle(action == "on")
         if action == "off":
+            set_status = getattr(player, "set_status", None) if player else None
+            if callable(set_status):
+                set_status(camera="off")
             return outcome.done("gesture_control", state="off")
         if result != "on":
             return outcome.failed("gesture_control", str(result))

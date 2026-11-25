@@ -140,7 +140,8 @@ class GestureController:
         self._thread: Optional[threading.Thread] = None
         self._stop = threading.Event()
         self._paused = threading.Event()
-        self.status = "off"
+        self._status = "off"
+        self._running = False
         self.last_gesture = ""
         self.log: Callable[[str], None] = print
         self.on_wake: Callable[[], None] = lambda: None
@@ -151,9 +152,17 @@ class GestureController:
         self.latest_jpeg: bytes = b""
         self.latest_at = 0.0
 
+    @property
+    def status(self) -> str:
+        return self._status
+
+    @status.setter
+    def status(self, val: str) -> None:
+        self._status = val
+
     # public ---------------------------------------------------------------
     def running(self) -> bool:
-        return bool(self._thread and self._thread.is_alive())
+        return self._running and bool(self._thread and self._thread.is_alive())
 
     def start(self) -> str:
         if self.running():
@@ -164,6 +173,7 @@ class GestureController:
             return problem
         self._stop.clear()
         self._paused.clear()
+        self._running = True
         self.status = "starting"
         self._thread = threading.Thread(target=self._loop, daemon=True, name="gestures")
         self._thread.start()
@@ -171,7 +181,10 @@ class GestureController:
 
     def stop(self) -> None:
         self._stop.set()
-        self.status = "off"
+        self._status = 'off'
+        self._running = False
+        if self._thread and self._thread.is_alive() and threading.current_thread() != self._thread:
+            self._thread.join(timeout=1.0)
 
     def pause(self) -> None:
         """Release the camera (SAM is about to use it)."""
@@ -285,6 +298,7 @@ class GestureController:
                 recognizer.close()
             except Exception:
                 pass
+            self._running = False
             if self.status not in ("error",):
                 self.status = "off"
 
