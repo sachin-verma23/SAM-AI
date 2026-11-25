@@ -111,6 +111,10 @@ Result (offline end-to-end test): warm-up ~65 s, then replies in **5–17 s**; "
 | `gestures_enabled` | false | webcam gestures |
 | `gesture_actions` | see `core/gestures.py` | remap a gesture to any `computer_settings` action, `wake_sam`, or `""` |
 | `ui_lite` | false | slower HUD repaint to save CPU |
+| `camera_persistent` | true | the webcam view stays open until "close camera" or ✕ (false = old behaviour: closes 2 s after the answer) |
+
+### Camera view
+The webcam view (after "camera se dekho", `screen_process` angle=camera) stays on screen until you say "camera band karo" or press ✕ CLOSE (`camera_persistent`). Only one part of SAM opens the webcam: when gesture control is running, its thread captures 640×480 and feeds both the view (~15 fps) and the snapshot; otherwise the HUD opens it (~28 fps), retrying for ~3 s if the camera is busy and reopening after a second without frames. `SamLive.close_camera_view()` is the single close path (tool, ✕, auto-close). The footer chip `GESTURES · WATCHING` is the gesture controller, not the view.
 
 ### Gestures (when switched on)
 ✋ open palm = play/pause · ✊ fist = mute/unmute · 👍 / 👎 = volume ±10 (repeats while held) · ✌️ = next track · ☝️ = previous track · 🤟 = wake SAM · swipe ← / → = back / forward. A pose must be held ~0.5 s and then rests 1.5 s.

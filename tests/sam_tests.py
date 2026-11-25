@@ -675,6 +675,86 @@ def test_create_skill() -> None:
     check("status=ask" in create_skill({"description": "x"}), "a vague skill request is asked about")
 
 
+# ── persistent camera view ───────────────────────────────────────────────────
+
+def test_camera_view() -> None:
+    section("Camera view stays open; one owner; one close path")
+    import time as _t
+    import main
+    from core import gestures
+
+    class UI:
+        def __init__(self):
+            self.calls = []
+        def show_camera_view(self, on): self.calls.append(("view", on))
+        def push_camera_frame(self, b): self.calls.append(("frame", len(b)))
+        def start_camera_stream(self): self.calls.append(("stream", True))
+        def stop_camera_stream(self): self.calls.append(("stream", False))
+        def write_log(self, m): pass
+
+    j = main.SamLive.__new__(main.SamLive)
+    j.ui = UI()
+    j._cam_view = ""
+    ctl = gestures.controller()
+    real = (ctl.running, ctl.status, ctl.latest_jpeg, ctl.latest_at, ctl.frame_sink)
+    real_capture = main._capture_camera
+    try:
+        # gestures own the camera -> their frames feed the view, no second handle
+        ctl.running = lambda: True
+        ctl.status, ctl.latest_jpeg, ctl.latest_at = "watching", b"\xff\xd8jpeg", _t.monotonic()
+        img, mime = j._open_camera_view()
+        check(img == b"\xff\xd8jpeg" and mime == "image/jpeg", "the snapshot comes from the gesture thread")
+        check(ctl.frame_sink == j.ui.push_camera_frame and ("view", True) in j.ui.calls
+              and ("stream", True) not in j.ui.calls, "the view is fed by gestures; the HUD opens no camera")
+        j.close_camera_view()
+        check(ctl.frame_sink is None and j.ui.calls[-1] == ("view", False), "close stops the feed and hides the view")
+
+        # no gestures -> the HUD opens the camera, close gives nothing back to take
+        j.ui.calls.clear()
+        ctl.running = lambda: False
+        main._capture_camera = lambda: (b"snap", "image/jpeg")
+        img, _ = j._open_camera_view()
+        check(img == b"snap" and ("stream", True) in j.ui.calls, "without gestures the HUD stream opens")
+        j.close_camera_view()
+        check(("stream", False) in j.ui.calls and j._cam_view == "", "close stops the HUD stream")
+    finally:
+        ctl.running, ctl.status, ctl.latest_jpeg, ctl.latest_at, ctl.frame_sink = real
+        main._capture_camera = real_capture
+
+    src = (ROOT / "main.py").read_text(encoding="utf-8")
+    check('load_api_keys().get("camera_persistent", True)' in src,
+          "the view no longer closes by itself after an answer (camera_persistent, default on)")
+
+    # _open_cam retries while another part of SAM is letting go of the camera
+    import threading
+    from gui.window import MainWindow
+
+    class Cap:
+        def __init__(self, ok): self.ok = ok
+        def isOpened(self): return self.ok
+        def release(self): pass
+
+    class CV2:
+        tries = 0
+        def VideoCapture(self, idx, backend):
+            CV2.tries += 1
+            return Cap(CV2.tries >= 3)
+
+    class Win:
+        _cam_stop = threading.Event()
+        class _Sig:
+            msgs = []
+            def emit(self, m): self.msgs.append(m)
+        _log_sig = _Sig()
+        _open_cam = MainWindow._open_cam
+
+    w = Win()
+    cap = w._open_cam(CV2(), 0, 0)
+    check(cap is not None and cap.ok and CV2.tries == 3, "a busy camera is retried until it opens")
+    CV2.tries = -100
+    check(w._open_cam(CV2(), 0, 0) is None and Win._Sig.msgs, "a camera that never opens is reported, not silent")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -692,6 +772,7 @@ TESTS = [
     test_self_update,
     test_restart_and_voice_confirm,
     test_create_skill,
+    test_camera_view,
 ]
 
 

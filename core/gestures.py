@@ -60,8 +60,10 @@ LABELS = {
     "ILoveYou": "🤟 rock", "swipe_left": "← swipe", "swipe_right": "→ swipe",
 }
 
-FRAME_W, FRAME_H = 320, 240
+FRAME_W, FRAME_H = 320, 240          # what the recogniser sees
+VIEW_W, VIEW_H = 640, 480            # what is captured, shown and snapshotted
 TARGET_FPS = 8
+VIEW_FPS = 15                        # loop rate while the HUD shows the feed
 MIN_SCORE = 0.6
 STABLE_SECONDS = 0.5
 COOLDOWN_SECONDS = 1.5
@@ -142,6 +144,12 @@ class GestureController:
         self.last_gesture = ""
         self.log: Callable[[str], None] = print
         self.on_wake: Callable[[], None] = lambda: None
+        # When set, every captured frame is also handed to the HUD as JPEG, so
+        # the camera view and gestures share ONE camera handle (Windows usually
+        # lets only one open it).
+        self.frame_sink: Optional[Callable[[bytes], None]] = None
+        self.latest_jpeg: bytes = b""
+        self.latest_at = 0.0
 
     # public ---------------------------------------------------------------
     def running(self) -> bool:
@@ -183,8 +191,8 @@ class GestureController:
         cap = cv2.VideoCapture(index, backend)
         if not cap.isOpened():
             return None
-        cap.set(cv2.CAP_PROP_FRAME_WIDTH, FRAME_W)
-        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, FRAME_H)
+        cap.set(cv2.CAP_PROP_FRAME_WIDTH, VIEW_W)
+        cap.set(cv2.CAP_PROP_FRAME_HEIGHT, VIEW_H)
         return cap
 
     def _loop(self) -> None:
@@ -205,6 +213,7 @@ class GestureController:
         logic = GestureLogic(_configured_actions())
         cap = None
         t0 = time.monotonic()
+        n_frames = 0
         try:
             while not self._stop.is_set():
                 if self._paused.is_set():
@@ -230,8 +239,26 @@ class GestureController:
                     cap.release()
                     cap = None
                     continue
-                frame = cv2.flip(cv2.resize(frame, (FRAME_W, FRAME_H)), 1)   # mirror view
-                rgb = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                frame = cv2.flip(frame, 1)                       # mirror view
+                ok_jpg, jpg = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 70])
+                if ok_jpg:
+                    self.latest_jpeg, self.latest_at = jpg.tobytes(), time.monotonic()
+                    sink = self.frame_sink
+                    if sink:
+                        try:
+                            sink(self.latest_jpeg)
+                        except Exception:
+                            pass
+                n_frames += 1
+                # While the feed is on screen the loop runs faster for a smooth
+                # picture, but the model still sees about 8 frames a second.
+                if self.frame_sink and n_frames % 2:
+                    spare = 1.0 / VIEW_FPS - (time.monotonic() - started)
+                    if spare > 0 and self._stop.wait(spare):
+                        break
+                    continue
+                small = cv2.resize(frame, (FRAME_W, FRAME_H))
+                rgb = cv2.cvtColor(small, cv2.COLOR_BGR2RGB)
                 image = mp.Image(image_format=mp.ImageFormat.SRGB, data=rgb)
                 ts = int((time.monotonic() - t0) * 1000)
                 res = recognizer.recognize_for_video(image, ts)
@@ -244,7 +271,8 @@ class GestureController:
                 fire = logic.feed(time.monotonic(), gesture, score, wrist)
                 if fire:
                     self._fire(fire, logic.actions.get(fire, ""))
-                spare = 1.0 / TARGET_FPS - (time.monotonic() - started)
+                fps = VIEW_FPS if self.frame_sink else TARGET_FPS
+                spare = 1.0 / fps - (time.monotonic() - started)
                 if spare > 0 and self._stop.wait(spare):
                     break
         except Exception as e:

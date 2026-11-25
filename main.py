@@ -872,6 +872,8 @@ class SamLive:
                 print(f"[SAM] ⚠ Push-to-talk unavailable: {e}")
         # ── Hand gestures (core/gestures.py) — off unless switched on ─────────
         self.ui.on_gesture_toggle = self.set_gestures
+        self.ui.on_close_camera = self.close_camera_view
+        self._cam_view = ""        # "" | "hud" (HUD owns the camera) | "gestures"
         try:
             from memory.config_manager import get_gestures_enabled
             if get_gestures_enabled():
@@ -895,8 +897,14 @@ class SamLive:
         ctl.log = self.ui.write_log
         ctl.on_wake = lambda: self.wake(reason="gesture")
         if not enabled:
+            handover = getattr(self, "_cam_view", "") == "gestures"
+            ctl.frame_sink = None
             ctl.stop()
             save_gestures_enabled(False)
+            if handover:                             # keep the view: HUD opens the camera
+                self._cam_view = "hud"
+                time.sleep(1.0)
+                self.ui.start_camera_stream()
             self.ui.write_log("SYS: Gesture control off.")
             return "off"
         problem = gestures.missing()
@@ -905,8 +913,56 @@ class SamLive:
             self.ui.write_log(f"SYS: Gesture control unavailable — {problem}.")
             return problem
         save_gestures_enabled(True)
+        if getattr(self, "_cam_view", "") == "hud":  # view open: gestures take over the feed
+            self.ui.stop_camera_stream()
+            time.sleep(1.0)
+            ctl.frame_sink = self.ui.push_camera_frame
+            self._cam_view = "gestures"
+            ctl.start()
+            time.sleep(0.5)
+            self.ui.show_camera_view(True)
+            return "on"
         ctl.start()
         return "on"
+
+    def _open_camera_view(self) -> tuple[bytes, str]:
+        """Snapshot for vision + live view. Runs on a worker thread.
+
+        When gesture control owns the webcam, its frames are used for both, so
+        only one part of SAM ever opens the camera. Otherwise the HUD opens it."""
+        from core import gestures
+        ctl = gestures.controller()
+        if ctl.running() and ctl.status in ("watching", "starting"):
+            for _ in range(40):                      # up to 4 s for a first frame
+                if ctl.latest_jpeg and time.monotonic() - ctl.latest_at < 2.0:
+                    break
+                time.sleep(0.1)
+            if ctl.latest_jpeg:
+                ctl.frame_sink = self.ui.push_camera_frame
+                self._cam_view = "gestures"
+                self.ui.show_camera_view(True)
+                return ctl.latest_jpeg, "image/jpeg"
+        self._gestures_release_camera()
+        img = _capture_camera()
+        self._cam_view = "hud"
+        self.ui.start_camera_stream()
+        return img
+
+    def close_camera_view(self) -> None:
+        """Close the camera view, whoever feeds it, and give gestures the camera
+        back. Used by the close_camera tool, the ✕ button and the auto-close."""
+        from core import gestures
+        ctl = gestures.controller()
+        how = getattr(self, "_cam_view", "")
+        self._cam_view = ""
+        if how == "gestures":
+            ctl.frame_sink = None
+            self.ui.show_camera_view(False)
+            return
+        self.ui.stop_camera_stream()
+        if ctl.running():
+            time.sleep(1.0)                          # let the HUD stream release it
+        self._gestures_take_camera_back()
 
     @staticmethod
     def _gestures_release_camera() -> None:
@@ -1874,9 +1930,7 @@ class SamLive:
                     angle     = args.get("angle", "screen").lower()
                     user_text = args.get("text", "What do you see?")
                     if angle == "camera":
-                        await loop.run_in_executor(None, self._gestures_release_camera)
-                        img_b, mime_t = await loop.run_in_executor(None, _capture_camera)
-                        self.ui.start_camera_stream()
+                        img_b, mime_t = await loop.run_in_executor(None, self._open_camera_view)
                         self._vision_cam_active = True
                         print(f"[Vision] 📷 Camera: {len(img_b):,} bytes")
                         _stall = "camera"
@@ -1898,8 +1952,7 @@ class SamLive:
                     )
 
             elif name == "close_camera":
-                self.ui.stop_camera_stream()
-                self._gestures_take_camera_back()
+                await loop.run_in_executor(None, self.close_camera_view)
                 result = "Camera closed."
 
             elif name == "system_status":
@@ -2317,15 +2370,17 @@ class SamLive:
                             out_buf = []
 
                             if self._vision_close_pending:
-                                # This turn_complete IS the vision answer — close camera + release busy flag
+                                # This turn_complete IS the vision answer — release busy flag.
                                 self._vision_close_pending = False
                                 self._vision_busy = False
-                                async def _cam_close():
-                                    await asyncio.sleep(2.0)
-                                    self.ui.stop_camera_stream()
-                                    await asyncio.sleep(1.0)
-                                    self._gestures_take_camera_back()
-                                self._keep_task(asyncio.create_task(_cam_close()))
+                                # SAM: the view stays open until "close camera" or ✕,
+                                # unless "camera_persistent" is set to false.
+                                from memory.config_manager import load_api_keys
+                                if not load_api_keys().get("camera_persistent", True):
+                                    async def _cam_close():
+                                        await asyncio.sleep(2.0)
+                                        await asyncio.to_thread(self.close_camera_view)
+                                    self._keep_task(asyncio.create_task(_cam_close()))
 
                     if response.tool_call:
                         fn_responses = []

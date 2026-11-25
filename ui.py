@@ -388,6 +388,23 @@ class SamUI:
         except Exception:
             return {}
 
+    def show_camera_view(self, on: bool) -> None:
+        """Thread-safe: show or hide the camera page WITHOUT opening the camera
+        here — used when the gesture thread already owns it and supplies frames."""
+        self._win._cam_stream_sig.emit(bool(on))
+
+    def push_camera_frame(self, jpeg: bytes) -> None:
+        """Thread-safe: one JPEG frame for the camera page."""
+        self._win._cam_frame_sig.emit(bytes(jpeg))
+
+    @property
+    def on_close_camera(self):
+        return getattr(self._win, "on_close_camera", None)
+
+    @on_close_camera.setter
+    def on_close_camera(self, cb):
+        self._win.on_close_camera = cb
+
     def start_camera_stream(self) -> None:
         """Thread-safe: start live camera feed in the full HUD area."""
         self._win.start_camera_stream()

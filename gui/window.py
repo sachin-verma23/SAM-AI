@@ -221,7 +221,7 @@ class MainWindow(QMainWindow):
             }}
             QPushButton:hover {{ color: {C.PRI}; }}
         """)
-        _cam_x.clicked.connect(self.stop_camera_stream)
+        _cam_x.clicked.connect(self._close_camera_clicked)
         _cam_hdr.addWidget(_cam_x)
         _cam_v.addLayout(_cam_hdr)
         self._cam_live_lbl = QLabel()
@@ -508,19 +508,27 @@ class MainWindow(QMainWindow):
                 backend = cv2.CAP_DSHOW if _OS == "Windows" else cv2.CAP_ANY
             except AttributeError:
                 backend = 0
-            cap = cv2.VideoCapture(cam_idx, backend)
-            if not cap.isOpened():
-                cap = cv2.VideoCapture(0)
-            if not cap.isOpened():
+            cap = self._open_cam(cv2, cam_idx, backend)
+            if cap is None:
                 return
             # warm-up frames
             for _ in range(5):
                 cap.read()
-            while not self._cam_stop.wait(0.033) and cap.isOpened():
+            misses = 0
+            while not self._cam_stop.wait(0.033):
                 ret, frame = cap.read()
                 if ret and frame is not None:
+                    misses = 0
                     _, buf = cv2.imencode(".jpg", frame, [cv2.IMWRITE_JPEG_QUALITY, 65])
                     self._cam_frame_sig.emit(buf.tobytes())
+                    continue
+                misses += 1
+                if misses >= 30:            # about a second with no picture: reopen
+                    cap.release()
+                    cap = self._open_cam(cv2, cam_idx, backend)
+                    if cap is None:
+                        return
+                    misses = 0
             cap.release()
         except Exception as e:
             print(f"[Camera] Stream error: {e}")
@@ -529,6 +537,30 @@ class MainWindow(QMainWindow):
 
     def stop_camera_stream(self) -> None:
         self._cam_stop.set()
+
+    def _close_camera_clicked(self) -> None:
+        """✕ CLOSE on the camera view: close it the same way 'close camera'
+        does, whichever part of SAM owns the camera right now."""
+        cb = getattr(self, "on_close_camera", None)
+        if cb is None:
+            self.stop_camera_stream()
+            self._on_cam_stream(False)
+            return
+        threading.Thread(target=cb, daemon=True, name="cam-close").start()
+
+    def _open_cam(self, cv2, idx: int, backend: int):
+        """Open the webcam, retrying for ~3 s: the gesture thread or a snapshot
+        may still be letting go of it. None when it never opens (logged)."""
+        for _ in range(10):
+            cap = cv2.VideoCapture(idx, backend)
+            if cap.isOpened():
+                return cap
+            cap.release()
+            if self._cam_stop.wait(0.3):
+                return None
+        self._log_sig.emit(f"SYS: Camera {idx} could not be opened — is another "
+                           f"app using it, or is the privacy shutter closed?")
+        return None
 
     # --- Video in the HUD area ---------------------------------------------
     #
@@ -1361,7 +1393,7 @@ class MainWindow(QMainWindow):
         items.append(("MIC · MUTED", "MUTED_C") if self._muted else ("MIC · LIVE", "GREEN"))
         cam = st.get("camera")
         if cam:
-            items.append((f"CAM · {str(cam).upper()}", "GREEN" if cam == "watching" else "TEXT_DIM"))
+            items.append((f"GESTURES · {str(cam).upper()}", "GREEN" if cam == "watching" else "TEXT_DIM"))
         wake = st.get("wake")
         if wake:
             items.append((f"WAKE · {str(wake).upper()}", "PRI"))
