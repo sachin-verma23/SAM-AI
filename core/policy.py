@@ -43,6 +43,7 @@ DEFAULTS: dict[str, bool] = {
     "close_app": False,
     "power": True,
     "self_update": True,
+    "restart_sam": True,
 }
 
 # Categories the owner may not switch off: the machine itself going away.

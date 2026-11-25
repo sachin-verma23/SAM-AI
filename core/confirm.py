@@ -176,6 +176,14 @@ def resolve(accepted: bool) -> None:
                      name=f"confirm-{p.key}").start()
 
 
+def pending_info() -> Optional[dict]:
+    """{'key', 'title', 'at'} of the live confirmation, or None."""
+    with _lock:
+        if _pending is None or time.monotonic() - _pending.at > TIMEOUT_SECONDS:
+            return None
+        return {"key": _pending.key, "title": _pending.title, "at": _pending.at}
+
+
 def pending_title() -> str:
     """'' when nothing is waiting. Lets an action avoid stacking two banners."""
     with _lock:

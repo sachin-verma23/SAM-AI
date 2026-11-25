@@ -144,7 +144,7 @@ def run_change(instruction: str, player=None,
                 dev_agent._job_lock.release()
 
     base = git("rev-parse", "--abbrev-ref", "HEAD")
-    branch = BRANCH_PREFIX + time.strftime("%Y%m%d-%H%M%S")
+    branch = BRANCH_PREFIX + time.strftime("%Y%m%d-%H%M%S") + f"-{int(time.time() * 1000) % 1000:03d}"
     _set(status="working", branch=branch, base=base, instruction=instruction, summary="")
     git("checkout", "-q", "-b", branch)
     log(f"SYS: Self-update started on branch {branch}.")

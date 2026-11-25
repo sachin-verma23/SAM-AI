@@ -555,6 +555,126 @@ def test_self_update() -> None:
           "a vague request is asked about, not guessed")
 
 
+# ── restart, voice confirmation, new skills ─────────────────────────────────
+
+def test_restart_and_voice_confirm() -> None:
+    section("restart SAM; confirming by voice needs the user's own 'yes'")
+    import time as _t
+    from core import confirm
+    from actions.restart_sam import restart_sam
+    from actions.confirm_action import confirm_action
+    confirm.bind(show=lambda a, b: None, hide=lambda: None, log=lambda m: None, say=lambda m: None)
+    try:
+        class P:
+            restarts = 0
+            words = (0.0, "")
+            def request_restart(self):
+                P.restarts += 1
+            def last_user_words(self):
+                return P.words
+        p = P()
+        out = restart_sam({}, player=p)
+        check("[CONFIRMATION_PENDING]" in out and P.restarts == 0, "restart waits for CONFIRM")
+        check("not answered" in confirm_action({"action": "confirm"}, player=p),
+              "the model cannot confirm when the user has said nothing")
+        P.words = (_t.monotonic(), "nahi, ruko")
+        check("not a clear yes" in confirm_action({"action": "confirm"}, player=p),
+              "'nahi' is not taken as yes")
+        P.words = (_t.monotonic(), "haan restart kar do")
+        out = confirm_action({"action": "confirm"}, player=p)
+        for _ in range(40):
+            if P.restarts:
+                break
+            _t.sleep(0.05)
+        check("status=done" in out and P.restarts == 1, "the user's spoken 'haan' confirms and SAM restarts")
+
+        restart_sam({}, player=p)
+        P.words = (_t.monotonic() - 999, "haan")
+        check("not answered" in confirm_action({"action": "confirm"}, player=p),
+              "a 'yes' said before the banner does not count")
+        check("status=done" in confirm_action({"action": "cancel"}, player=p), "cancel works by voice")
+
+        confirm.request("self_update", "Let SAM change its own code", "x", lambda: "ran")
+        P.words = (_t.monotonic() + 1, "confirm")
+        check("button on screen" in confirm_action({"action": "confirm"}, player=p),
+              "code changes can only be confirmed with the screen button")
+        confirm.resolve(False)
+    finally:
+        confirm.bind(None, None, None, None)
+
+
+def test_create_skill() -> None:
+    section("SAM writes a new skill for itself (tested, then CONFIRM)")
+    import subprocess
+    from core import self_update as su, gemini
+    from actions import create_skill as cs
+    real_root, real_text = su.ROOT, gemini.text
+    good = (
+        "```python\n"
+        "import random\n"
+        "PLUGIN = {\"name\": \"dice_roll\", \"description\": \"Roll a dice.\",\n"
+        "          \"parameters\": {\"type\": \"OBJECT\", \"properties\": {}}}\n"
+        "def run(parameters, player=None, session_memory=None):\n"
+        "    return f\"You rolled {random.randint(1, 6)}.\"\n"
+        "```"
+    )
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td)
+        def g(*a):
+            return subprocess.run(["git", *a], cwd=repo, capture_output=True, text=True).stdout.strip()
+        g("init", "-q", "-b", "main"); g("config", "user.email", "t@example.invalid"); g("config", "user.name", "t")
+        for d in ("tests", "plugins", "actions"):
+            (repo / d).mkdir()
+        (repo / "tests" / "__init__.py").write_text("", encoding="utf-8")
+        (repo / "tests" / "sam_tests.py").write_text("import sys\nsys.exit(0)\n", encoding="utf-8")
+        (repo / "plugins" / "_template.py").write_text("# template\n", encoding="utf-8")
+        (repo / "actions" / "__init__.py").write_text("", encoding="utf-8")
+        (repo / ".gitignore").write_text("__pycache__/\n", encoding="utf-8")
+        g("add", "-A"); g("commit", "-q", "-m", "base")
+        su.ROOT = repo
+        try:
+            gemini.text = lambda *a, **k: good
+            restarts = []
+            su.run_change("New skill: roll a dice", say=lambda m: None, log=lambda m: None,
+                          ask_apply=lambda t, d, run: run(), restart=lambda: restarts.append(1),
+                          improve=cs.write_skill)
+            f = repo / "plugins" / "dice_roll.py"
+            check(f.exists() and restarts == [1], "a working skill is added and SAM restarts")
+            from core.plugin_loader import discover_plugins
+            reg = discover_plugins(plugins_dir=repo / "plugins", core_tool_names=set(),
+                                   logger=lambda m: None)
+            out = reg.run("dice_roll", {}, player=None, session_memory=None)
+            check(reg.has("dice_roll") and "You rolled" in out, "the new skill loads and answers")
+
+            gemini.text = lambda *a, **k: "```python\nPLUGIN = {\"name\": \"broken_one\"}\n```"
+            said = []
+            su.run_change("New skill: broken", say=said.append, log=lambda m: None,
+                          ask_apply=lambda t, d, run: run(), restart=lambda: None,
+                          improve=cs.write_skill)
+            check(not (repo / "plugins" / "broken_one.py").exists() and any("NOT applied" in m for m in said),
+                  "a skill the loader rejects is thrown away")
+
+            gemini.text = lambda *a, **k: ("```python\nfrom PyQt6.QtWidgets import QWidget\n"
+                                           "PLUGIN = {\"name\": \"ui_thing\", \"description\": \"x\", "
+                                           "\"parameters\": {\"type\": \"OBJECT\", \"properties\": {}}}\n"
+                                           "def run(p, player=None, session_memory=None):\n    return 'x'\n```")
+            su.run_change("New skill: ui", say=lambda m: None, log=lambda m: None,
+                          ask_apply=lambda t, d, run: run(), restart=lambda: None,
+                          improve=cs.write_skill)
+            check(not (repo / "plugins" / "ui_thing.py").exists(), "a skill that touches Qt is refused")
+
+            gemini.text = lambda *a, **k: None
+            su.run_change("New skill: offline", say=lambda m: None, log=lambda m: None,
+                          ask_apply=lambda t, d, run: run(), restart=lambda: None,
+                          improve=cs.write_skill)
+            check(g("status", "--porcelain") == "" and g("rev-parse", "--abbrev-ref", "HEAD") == "main",
+                  "no model answer leaves the repo clean on main")
+        finally:
+            su.ROOT, gemini.text = real_root, real_text
+    from actions.create_skill import create_skill
+    check("status=ask" in create_skill({"description": "x"}), "a vague skill request is asked about")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -570,6 +690,8 @@ TESTS = [
     test_gestures,
     test_setup_script_on_a_fresh_install,
     test_self_update,
+    test_restart_and_voice_confirm,
+    test_create_skill,
 ]
 
 

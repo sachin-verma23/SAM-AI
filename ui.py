@@ -233,6 +233,14 @@ class SamUI:
         self._win.ptt_hold = cb
 
     @property
+    def on_user_typed(self):
+        return getattr(self._win, "on_user_typed", None)
+
+    @on_user_typed.setter
+    def on_user_typed(self, cb):
+        self._win.on_user_typed = cb
+
+    @property
     def on_gesture_toggle(self):
         return getattr(self._win, "on_gesture_toggle", None)
 

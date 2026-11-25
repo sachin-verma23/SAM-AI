@@ -83,6 +83,9 @@ SLIM: list[dict] = [
      "parameters": {"type": "OBJECT", "properties": {
          "action": {"type": "STRING"}, "value": {"type": "STRING"}},
          "required": ["action"]}},
+    {"name": "restart_sam",
+     "description": "Restart SAM itself (the app), when the user says 'restart SAM'.",
+     "parameters": {"type": "OBJECT", "properties": {}}},
     {"name": "shutdown_sam",
      "description": "Close SAM itself when the user says goodbye or asks it to stop.",
      "parameters": {"type": "OBJECT", "properties": {}}},

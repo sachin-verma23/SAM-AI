@@ -2978,6 +2978,14 @@ class MainWindow(QMainWindow):
         if not txt: return
         self._input.clear()
         self._log.append_log(f"You: {txt}")
+        # SAM: the input box is the one place typed words are the USER's own
+        # (clipboard buttons and quiz results reuse on_text_command).
+        hook = getattr(self, "on_user_typed", None)
+        if hook:
+            try:
+                hook(txt)
+            except Exception:
+                pass
         if self.on_text_command:
             threading.Thread(target=self.on_text_command, args=(txt,), daemon=True).start()
 

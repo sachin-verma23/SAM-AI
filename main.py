@@ -634,7 +634,7 @@ def _is_network_error(exc: BaseException) -> bool:
 _ONLINE_ONLY_TOOLS = {
     "web_search", "browser_control", "youtube_video", "flight_finder",
     "weather_report", "background_tasks", "game_updater", "manage_monitor",
-    "self_update", "dev_agent",
+    "self_update", "dev_agent", "create_skill",
 }
 
 
@@ -802,7 +802,9 @@ class SamLive:
         self.ui.get_plugins = self._plugin_registry.list_for_ui
         self.ui.get_plugin_settings = self._plugin_registry.settings_schemas  # ⚙ settings tab
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
-        self.ui.request_restart = self.restart  # self_update: load new code
+        self.ui.request_restart = self.restart  # self_update / restart_sam
+        self.ui.last_user_words = self.last_user_words   # voice confirmation check
+        self.ui.on_user_typed = self._note_user_words   # the input box only
         # Tools that change something baked in at connect time (the language
         # rule, the engine) ask for a rebuild. fresh=True starts a clean
         # conversation so the server cannot restore the old instructions.
@@ -1432,6 +1434,15 @@ class SamLive:
         # this object — it only ever sees what this callback returns.
         return (url, key, f"{url}/auto-login?key={key}", manual,
                 getattr(self._dashboard, "_bind_error", "") or "")
+
+    def _note_user_words(self, text: str) -> None:
+        """What the USER last said or typed, and when. Only this conversation
+        thread writes it — never a tool result — so a page or document cannot
+        pretend the user said 'confirm' (see actions/confirm_action.py)."""
+        self._last_user_words = (time.monotonic(), str(text or ""))
+
+    def last_user_words(self) -> tuple[float, str]:
+        return getattr(self, "_last_user_words", (0.0, ""))
 
     def _on_text_command(self, text: str):
         if not self._loop or not self.session:
@@ -2276,6 +2287,7 @@ class SamLive:
                                 self.ui.write_log(f"You: {full_in}")
                                 self._session_log.append(f"User: {full_in}")
                                 _history_append("user", full_in)
+                                self._note_user_words(full_in)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
                                         "type": "log", "speaker": "user",
@@ -2801,6 +2813,7 @@ class SamLive:
                         turn_complete=True,
                     )
                     self.ui.write_log(f"[Web]: {text}")
+                    self._note_user_words(text)
                 else:
                     print(f"[Dashboard] Dropped command (no session): {text}")
             except asyncio.TimeoutError:
