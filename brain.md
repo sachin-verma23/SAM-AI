@@ -73,7 +73,7 @@ SAM is SAM customised for **Sachin Verma**. Everything below is new or changed; 
 | Confirmation | shutdown, restart, Wi-Fi | plus delete, overwrite, move, organise desktop, send message, package installs (close app: optional) |
 | After CONFIRM / CANCEL | result only in the activity log | SAM is told the result and says it |
 | Memory panel | view, delete | view, edit (✎), add (+), delete |
-| Wake word | "Hey Sam" (openWakeWord) | "Hey Sam" (Vosk); `wake_engine: sam` brings the old one back |
+| Wake word | "Hey Sam" (openWakeWord) | "Hey Sam" (Vosk only; the openWakeWord engine was removed) |
 | Footer | engine + mic | AI (online/offline + model), NET, MIC, CAM, WAKE — live |
 | HUD | 30/20 Hz repaint | same, or 15/10 Hz with `ui_lite` |
 | Error "1007" | opened the API-key screen | only a real bad-key message does (`gemini.is_key_error`) |
@@ -106,7 +106,6 @@ Result (offline end-to-end test): warm-up ~65 s, then replies in **5–17 s**; "
 | `dashboard_enabled` | false | start the phone dashboard at launch |
 | `dashboard_port` | 8765 | HTTP port (HTTPS = +1) |
 | `confirm_actions` | see `core/policy.py` | e.g. `{"move_files": false, "close_app": true}` |
-| `wake_engine` | `sam` | sam (Vosk "Hey Sam") / sam (openWakeWord) |
 | `wake_threshold` | 0.85 | Hey Sam word confidence; raise if it wakes by itself |
 | `gestures_enabled` | false | webcam gestures |
 | `gesture_actions` | see `core/gestures.py` | remap a gesture to any `computer_settings` action, `wake_sam`, or `""` |
@@ -122,6 +121,22 @@ The webcam view (after "camera se dekho", `screen_process` angle=camera) stays o
 ### Self-update (SAM changes its own code)
 Say what you want added or changed ("apne andar ek nayi setting banao jo …"). SAM puts **CONFIRM #1** on screen; after it, the coding agent edits SAM's folder on a new branch `sam-self/<time>`. Every changed file must compile and `python -m tests.sam_tests` must pass, otherwise everything is thrown away. If it passes, SAM tells you what changed and shows **CONFIRM #2**; pressing it applies the change and restarts SAM. CANCEL keeps it waiting ("apply kar do" later, or "discard"). "Pichla code change wapas lo" reverts the last applied change and restarts. Requirements: online (uses the Gemini coding model), and no uncommitted edits in the folder. The `self_update` policy category can never be switched off.
 
+### New skills by voice (`create_skill`)
+"Apne andar ek nayi skill banao jo …" → `actions/create_skill.py` asks the Gemini SMART model to write one file `plugins/<name>.py` (`PLUGIN` + `run()`, no PyQt, must load in the plugin loader), then runs it through the same self-update flow (branch, compile, `tests.sam_tests`, CONFIRM, restart). Skills SAM has written so far: `randomizer`, `sleep_mode`. A broken skill is fixed the same way ("sleep_mode skill theek karo") or removed with "pichla code change wapas lo".
+
+### Restart, shutdown, voice confirm
+- "SAM restart karo" → `restart_sam` (CONFIRM via policy `restart_sam`) → saves context, `finish()`, starts a new `main.py`, ends the old process.
+- "SAM band karo" → `shutdown_sam`.
+- "haan / confirm / cancel" while a CONFIRM banner is up → `confirm_action` (written by SAM, then hardened): it only confirms if your own words came **after** the banner, within 60 s, and say yes without no. Code changes (`self_update`, `self_update_apply`) can only be confirmed on screen. Cancel always works.
+
+### Changes SAM made to itself (git log, `SAM self-update:` commits)
+| Commit | What |
+|---|---|
+| `010115e` | `confirm_action` tool (voice confirm) |
+| `c75ac83` | `plugins/randomizer.py` |
+| `2966f98` | Gesture status fix: `GestureController.stop()` sets status `off` at once, clears a `_running` flag and joins the thread (≤1 s); `running()` needs both the flag and a live thread; `gesture_control off` also pushes `set_status(camera="off")` so the footer chip turns off immediately. |
+| `643fa03` | `plugins/sleep_mode.py`: "go to sleep mode" → `user32.LockWorkStation()`, then shows "Sleep Mode — System locked." in the content panel. No CONFIRM (locking is harmless). |
+
 ### Voice commands added
 - "ab se Hindi / English / Hinglish mein baat karo", "jo bhasha main bolun usi mein jawab do" → `sam_settings set_language`
 - "offline mode", "online mode", "auto mode" → `sam_settings set_mode`
@@ -129,6 +144,7 @@ Say what you want added or changed ("apne andar ek nayi setting banao jo …"). 
 - "kal humne kya baat ki thi?", "maine folder ka naam kya bataya tha?" → `conversation_history`
 - "gestures on / off karo", "kaun se gestures hain?" → `gesture_control`
 - "apne code mein … jodo / badlo", "apply kar do", "pichla code change wapas lo" → `self_update`
+- "nayi skill banao jo …" → `create_skill` · "SAM restart karo" → `restart_sam` · "go to sleep mode" → `sleep_mode`
 
 ---
 
@@ -286,7 +302,7 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
 | `providers/` | Optional local or third-party engine (see §17). Never imported unless configured. |
 | `dashboard/` | Phone remote control: `server.py` (FastAPI) plus `static/app.html` and `login.html`. |
 | `agents/` | Background agent profiles: `general.md`, `researcher.md`. |
-| `plugins/` | Drop-in skills. **Only `_template.py` is present.** |
+| `plugins/` | Drop-in skills: `_template.py`, plus skills SAM wrote itself — `randomizer.py` (rolls a dice, optional number of sides), `sleep_mode.py` (locks Windows on "go to sleep mode"). |
 | `config/` | `__init__.py` (OS helpers), `sam.ico`, `api_keys.json` (your settings and key). |
 
 ---
@@ -681,7 +697,7 @@ Other uses: **sidecar** (one-shot calls go to another model when Gemini's text q
 
 ## 20. Wake word, push-to-talk, echo guard, lip-sync
 
-- **Wake word** (`core/wake_word.py` → `core/wake_sam.py`): SAM listens for **"Hey Sam"** with Vosk (or the original openWakeWord "Hey Sam" with `wake_engine: sam`), on its own thread, mic frames pushed by a queue. While asleep **nothing is streamed** to Gemini. Wake by saying "Hey Sam", pressing WAKE NOW, holding the push-to-talk key, or a remote command. Auto-sleeps after 120 s with no speech. Installed with one click from CONTROLS.
+- **Wake word** (`core/wake_word.py` → `core/wake_sam.py`): SAM listens for **"Hey Sam"** with Vosk (grammar "hey sam / hi sam / okay sam", model `models/vosk-model-small-en-in-0.4`), on its own thread, mic frames pushed by a queue. While asleep **nothing is streamed** to Gemini. Wake by saying "Hey Sam", pressing WAKE NOW, holding the push-to-talk key, or a remote command. Auto-sleeps after 120 s with no speech. Installed with one click from CONTROLS.
 - **Push-to-talk** (`core/hotkey.py`): Ctrl+Space; global on Windows (polls `GetAsyncKeyState` 30 times a second), window-only elsewhere. With a local engine, the key release ends the turn.
 - **Echo guard** (`core/echo.py`): compares band energies of the mic against what is playing and calibrates itself. Used only for the echo tail; voice barge-in is disabled.
 - **Lip-sync:** audio formants (timing and vowels) plus transcript visemes (`core/viseme.py`, which knows closures such as m, b and p), scheduled against the real playback time. About 50 shapes a second. Biased to lead the audio slightly, never lag.
