@@ -33,6 +33,8 @@ config/*.broken-*
 reports/
 uploads/
 providers/voices/
+.sam_backup/
+config/project_briefs/
 
 # ── Python build noise ────────────────────────────────────────────────────────
 __pycache__/

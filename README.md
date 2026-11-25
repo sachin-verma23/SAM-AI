@@ -41,6 +41,7 @@ Self-tests (no network or key needed):
 | 🖥️ PC control | Apps, files, volume, brightness, media, windows, browser, reminders, routines |
 | ✅ Safety | Delete, overwrite, move, send message, shutdown and installs wait for your CONFIRM on screen |
 | ✋ Gestures | Webcam hand gestures for media, volume and navigation (off by default) |
+| 🛠️ Self-update | Ask SAM to add a feature or setting to itself; it codes, tests, and applies only after your CONFIRM (and can roll back) |
 | 📊 HUD | Animated assistant with live AI / internet / mic / camera / wake-word status |
 
 ## Offline mode

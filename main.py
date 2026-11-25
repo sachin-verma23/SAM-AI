@@ -634,6 +634,7 @@ def _is_network_error(exc: BaseException) -> bool:
 _ONLINE_ONLY_TOOLS = {
     "web_search", "browser_control", "youtube_video", "flight_finder",
     "weather_report", "background_tasks", "game_updater", "manage_monitor",
+    "self_update", "dev_agent",
 }
 
 
@@ -801,6 +802,7 @@ class SamLive:
         self.ui.get_plugins = self._plugin_registry.list_for_ui
         self.ui.get_plugin_settings = self._plugin_registry.settings_schemas  # ⚙ settings tab
         self.ui.request_say = self.plugin_say   # plugins: mid-task speech channel
+        self.ui.request_restart = self.restart  # self_update: load new code
         # Tools that change something baked in at connect time (the language
         # rule, the engine) ask for a rebuild. fresh=True starts a clean
         # conversation so the server cannot restore the old instructions.
@@ -1107,6 +1109,28 @@ class SamLive:
                 eng.shutdown(wait=2.0)
         except Exception as e:
             print(f"[Tasks] shutdown: {e}")
+
+    def restart(self) -> None:
+        """Start a fresh SAM process and end this one (after a self-update).
+
+        The summary is written and the engines stopped first, like a normal
+        exit; the new process is started before this one ends so the window
+        comes straight back."""
+        def go():
+            self.ui.write_log("SYS: Restarting SAM to load the new code…")
+            try:
+                self.finish(timeout=10.0)
+            except Exception as e:
+                print(f"[SAM] restart wrap-up: {e!r}")
+            try:
+                import subprocess
+                subprocess.Popen([sys.executable, str(BASE_DIR / "main.py")],
+                                 cwd=str(BASE_DIR))
+            except Exception as e:
+                print(f"[SAM] could not start the new process: {e!r}")
+                return                       # stay alive rather than vanish
+            _exit_process(0)
+        threading.Thread(target=go, daemon=True, name="sam-restart").start()
 
     def finish(self, timeout: float = 15.0) -> None:
         """Called on the Qt thread after the window has closed. The window is

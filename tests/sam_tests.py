@@ -453,6 +453,108 @@ def test_setup_script_on_a_fresh_install() -> None:
             window._read_full_config = real
 
 
+# ── self-update ──────────────────────────────────────────────────────────────
+
+def test_self_update() -> None:
+    section("SAM changes its own code only through branch + tests + CONFIRM")
+    import subprocess
+    from core import self_update as su
+    real_root = su.ROOT
+    with tempfile.TemporaryDirectory() as td:
+        repo = Path(td)
+
+        def g(*a):
+            return subprocess.run(["git", *a], cwd=repo, capture_output=True,
+                                  text=True).stdout.strip()
+
+        def write(name, text):
+            (repo / name).write_text(text, encoding="utf-8")
+
+        def read(name):
+            return (repo / name).read_text(encoding="utf-8")
+
+        g("init", "-q", "-b", "main")
+        g("config", "user.email", "t@example.invalid")
+        g("config", "user.name", "test")
+        (repo / "tests").mkdir()
+        write("tests/__init__.py", "")
+        write("tests/sam_tests.py",
+              "import sys, pathlib\nsys.exit(1 if pathlib.Path('BREAK').exists() else 0)\n")
+        write("app.py", "print('v1')\n")
+        g("add", "-A")
+        g("commit", "-q", "-m", "base")
+        su.ROOT = repo
+        quiet = lambda m: None
+        try:
+            said, restarts = [], []
+
+            def agent_ok(folder, text, player):
+                (folder / "app.py").write_text("print('v2')\n", encoding="utf-8")
+                (folder / "new_setting.py").write_text("ENABLED = True\n", encoding="utf-8")
+                return "added new_setting.py"
+
+            su.run_change("add a new setting", say=said.append, log=quiet,
+                          ask_apply=lambda t, d, run: run(),
+                          restart=lambda: restarts.append(1), improve=agent_ok)
+            check(read("app.py") == "print('v2')\n" and (repo / "new_setting.py").exists(),
+                  "a tested change is applied after CONFIRM")
+            check(restarts == [1], "SAM restarts to load it")
+            check(g("rev-parse", "--abbrev-ref", "HEAD") == "main"
+                  and not g("branch", "--list", "sam-self/*"),
+                  "back on main, the work branch is gone")
+            check(g("log", "-1", "--format=%s").startswith(su.COMMIT_PREFIX),
+                  "the change is one labelled commit")
+
+            def agent_breaks(folder, text, player):
+                (folder / "BREAK").write_text("x", encoding="utf-8")
+                (folder / "app.py").write_text("print('v3')\n", encoding="utf-8")
+                return "broke it"
+
+            said.clear()
+            su.run_change("break the tests", say=said.append, log=quiet,
+                          ask_apply=lambda t, d, run: run(), restart=lambda: None,
+                          improve=agent_breaks)
+            check(read("app.py") == "print('v2')\n" and not (repo / "BREAK").exists(),
+                  "a change that fails the tests is thrown away completely")
+            check(any("NOT applied" in m for m in said), "SAM says it was not applied")
+
+            def agent_syntax(folder, text, player):
+                (folder / "app.py").write_text("def broken(:\n", encoding="utf-8")
+                return "oops"
+
+            su.run_change("bad syntax", say=quiet, log=quiet,
+                          ask_apply=lambda t, d, run: run(), restart=lambda: None,
+                          improve=agent_syntax)
+            check(read("app.py") == "print('v2')\n", "code that does not compile is thrown away")
+
+            def agent_later(folder, text, player):
+                (folder / "later.py").write_text("X = 1\n", encoding="utf-8")
+                return "later"
+
+            su.run_change("wait for me", say=quiet, log=quiet,
+                          ask_apply=lambda t, d, run: "pending", restart=lambda: None,
+                          improve=agent_later)
+            check(not (repo / "later.py").exists() and su.status()["pending"],
+                  "without CONFIRM nothing is applied; the change waits on its branch")
+            su.discard_pending()
+            check(not su.status()["pending"], "a waiting change can be discarded")
+
+            write("dirty.txt", "x")
+            check("uncommitted" in su.available(), "it refuses to start on a dirty working tree")
+            (repo / "dirty.txt").unlink()
+
+            su.rollback(restart=lambda: restarts.append(2), log=quiet)
+            check(read("app.py") == "print('v1')\n" and not (repo / "new_setting.py").exists(),
+                  "rollback undoes the last applied change")
+        finally:
+            su.ROOT = real_root
+    from core import policy
+    check(policy.needs_confirm("self_update"), "self-update always needs CONFIRM")
+    from actions.self_update import self_update
+    check("status=ask" in self_update({"action": "change", "instruction": "x"}),
+          "a vague request is asked about, not guessed")
+
+
 TESTS = [
     test_memory_is_safe,
     test_routine_defaults_are_quiet,
@@ -467,6 +569,7 @@ TESTS = [
     test_wake_word_hey_sam,
     test_gestures,
     test_setup_script_on_a_fresh_install,
+    test_self_update,
 ]
 
 

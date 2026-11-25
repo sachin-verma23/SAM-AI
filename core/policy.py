@@ -15,6 +15,7 @@ DEFAULTS (True = ask first)
     install_packages  the coding agent installing Python packages
     close_app         closing an application (unsaved work could be lost)
     power             shutdown / restart / Wi-Fi (always asked; cannot be turned off)
+    self_update       SAM changing its own code (always asked; cannot be turned off)
 
 Override any of them in config/api_keys.json:
     "confirm_actions": {"move_files": false, "close_app": true}
@@ -41,10 +42,11 @@ DEFAULTS: dict[str, bool] = {
     "install_packages": True,
     "close_app": False,
     "power": True,
+    "self_update": True,
 }
 
 # Categories the owner may not switch off: the machine itself going away.
-ALWAYS = {"power"}
+ALWAYS = {"power", "self_update"}   # SAM changing its own code always asks
 
 
 def needs_confirm(category: str) -> bool:

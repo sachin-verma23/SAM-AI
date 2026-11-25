@@ -55,6 +55,7 @@ SAM is SAM customised for **Sachin Verma**. Everything below is new or changed; 
 | `actions/sam_settings.py` | Voice tool: `set_language`, `set_mode`, `set_lite`, `get` |
 | `actions/conversation_history.py` | Voice tool: search / recent / day of earlier conversations |
 | `actions/gesture_control.py` | Voice tool: gestures on / off / status |
+| `core/self_update.py` + `actions/self_update.py` | SAM changes its own code on request: CONFIRM → git branch `sam-self/<time>` → coding agent → compile + `tests.sam_tests` → CONFIRM → apply + restart; `rollback` reverts the last one |
 | `setup_sam.py` | One-command setup after `setup.py`: offline packages, Ollama + model, voices, Whisper, Hey Sam and gesture models, tuned offline/auto settings, final report |
 | `tests/sam_tests.py` | Self-test for every SAM change: `python -m tests.sam_tests` (89 checks) |
 | `models/` (git-ignored) | `vosk-model-small-en-in-0.4/` (36 MB) and `gesture_recognizer.task` (8 MB) |
@@ -114,12 +115,16 @@ Result (offline end-to-end test): warm-up ~65 s, then replies in **5–17 s**; "
 ### Gestures (when switched on)
 ✋ open palm = play/pause · ✊ fist = mute/unmute · 👍 / 👎 = volume ±10 (repeats while held) · ✌️ = next track · ☝️ = previous track · 🤟 = wake SAM · swipe ← / → = back / forward. A pose must be held ~0.5 s and then rests 1.5 s.
 
+### Self-update (SAM changes its own code)
+Say what you want added or changed ("apne andar ek nayi setting banao jo …"). SAM puts **CONFIRM #1** on screen; after it, the coding agent edits SAM's folder on a new branch `sam-self/<time>`. Every changed file must compile and `python -m tests.sam_tests` must pass, otherwise everything is thrown away. If it passes, SAM tells you what changed and shows **CONFIRM #2**; pressing it applies the change and restarts SAM. CANCEL keeps it waiting ("apply kar do" later, or "discard"). "Pichla code change wapas lo" reverts the last applied change and restarts. Requirements: online (uses the Gemini coding model), and no uncommitted edits in the folder. The `self_update` policy category can never be switched off.
+
 ### Voice commands added
 - "ab se Hindi / English / Hinglish mein baat karo", "jo bhasha main bolun usi mein jawab do" → `sam_settings set_language`
 - "offline mode", "online mode", "auto mode" → `sam_settings set_mode`
 - "lite mode on karo" → `sam_settings set_lite`
 - "kal humne kya baat ki thi?", "maine folder ka naam kya bataya tha?" → `conversation_history`
 - "gestures on / off karo", "kaun se gestures hain?" → `gesture_control`
+- "apne code mein … jodo / badlo", "apply kar do", "pichla code change wapas lo" → `self_update`
 
 ---
 
