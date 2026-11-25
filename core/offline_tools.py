@@ -19,6 +19,11 @@ from __future__ import annotations
 
 # Ordered by importance: a tight budget keeps the top of the list.
 SLIM: list[dict] = [
+    {"name": "confirm_action",
+     "description": "Resolves a pending on-screen confirmation request by voice. action: confirm|cancel.",
+     "parameters": {"type": "OBJECT", "properties": {
+         "action": {"type": "STRING"}},
+         "required": ["action"]}},
     {"name": "computer_settings",
      "description": "PC control. action: volume_set|volume_up|volume_down|mute|unmute|"
                     "brightness_set|brightness_up|brightness_down|media_play_pause|media_next|"
