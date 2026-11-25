@@ -1,7 +1,7 @@
 """
 core/policy.py — which actions need the owner's on-screen confirmation.
 
-MARK LVII's confirmation gate (core/confirm.py) is a button only a person can
+SAM's confirmation gate (core/confirm.py) is a button only a person can
 press; the model cannot forge it. It guarded three things: shutdown, restart and
 Wi-Fi. SAM extends it to everything that destroys, overwrites or leaves the
 machine, and makes the list a setting.

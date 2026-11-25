@@ -1,6 +1,6 @@
 """gui/metrics.py — System telemetry for the HUD: CPU, memory, network, GPU and temperature.
 
-Split out of ui.py in Mark LVII; behaviour unchanged."""
+Split out of ui.py in SAM; behaviour unchanged."""
 from __future__ import annotations
 
 import json

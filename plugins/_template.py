@@ -16,7 +16,7 @@ ONE RULE IF YOUR PLUGIN NEEDS TO ASK A MODEL SOMETHING
 
     You get three things that are impossible to add afterwards: a deadline on
     every call, a ladder that steps to another model when one is out of quota or
-    not answering, and — since Mark LVI — whatever provider the user configured
+    not answering, and — since an earlier version — whatever provider the user configured
     in ⚙ → ENGINE & PROVIDERS, so your plugin keeps working on Ollama or another
     API when Gemini's text quota is gone.
 
@@ -44,7 +44,7 @@ PLUGIN = {
 def run(parameters: dict, player=None, session_memory=None) -> str:
     """
     parameters: dict of the args Gemini extracted, matching PLUGIN['parameters'].
-    player: the JarvisUI instance — use player.write_log(f"SAM: ...") to log,
+    player: the SamUI instance — use player.write_log(f"SAM: ...") to log,
             same as actions/*.py. May be None.
     session_memory: reserved, usually None today (core tools mostly pass None too).
     Return a short natural-language string — this is spoken back to the user.

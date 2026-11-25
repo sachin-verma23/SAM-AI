@@ -1,5 +1,5 @@
 """
-SAM self-test — checks the features added on top of MARK LVII.
+SAM self-test — checks SAM's features.
 
     .venv\\Scripts\\python.exe -m tests.sam_tests
 
@@ -117,7 +117,8 @@ def test_rebrand() -> None:
     from memory import config_manager as cm
     check(theme.APP_VERSION.startswith("SAM"), "app version is SAM")
     check(theme.APP_OWNER == "Sachin Verma", "owner is Sachin Verma")
-    check("FatihMakes" in theme.APP_BASED_ON, "the original author is credited (licence)")
+    check((ROOT / "LICENSE").exists() and (ROOT / "NOTICE").exists(),
+          "LICENSE and NOTICE are present (the licence requires them)")
     real = cm.CONFIG_FILE
     with tempfile.TemporaryDirectory() as td:
         cm.CONFIG_FILE = Path(td) / "api_keys.json"
@@ -128,8 +129,8 @@ def test_rebrand() -> None:
     files = subprocess.run(["git", "ls-files", "*.py", "*.html", "*.txt"], cwd=ROOT,
                            capture_output=True, text=True).stdout.split()
     left = [f for f in files if f != "tests/sam_tests.py"
-            and re.search(r"JARVIS", (ROOT / f).read_text(encoding="utf-8"))]
-    check(not left, f"no 'JARVIS' left in code or pages ({', '.join(left) or 'none'})")
+            and re.search(r"SAM", (ROOT / f).read_text(encoding="utf-8"))]
+    check(not left, f"no 'SAM' left in code or pages ({', '.join(left) or 'none'})")
     from gui.window import MainWindow
     check(MainWindow._subtitle("SAM").endswith("Sachin Verma"), "header subtitle names the owner")
 
@@ -206,7 +207,7 @@ def test_auto_switching() -> None:
 
             class _UI:
                 def write_log(self, *_): pass
-            j = main.JarvisLive.__new__(main.JarvisLive)
+            j = main.SamLive.__new__(main.SamLive)
             j.ui = _UI()
             want, why = j._auto_wants_local()
             check(want and why == "No internet", "offline: auto mode picks the local AI")
@@ -306,7 +307,7 @@ def test_offline_engine_is_light() -> None:
     names = [d["name"] for d in slim]
     check("web_search" not in names, "online-only tools are not in the offline list")
     check(names[:2] == ["computer_settings", "open_app"], "PC control comes first")
-    check("shutdown_jarvis" in names and "save_memory" in names, "memory and shutdown are kept")
+    check("shutdown_sam" in names and "save_memory" in names, "memory and shutdown are kept")
     check(schema.payload_size(offline_tools.SLIM) < 4500,
           f"the whole offline tool list is small ({schema.payload_size(offline_tools.SLIM)} chars)")
     from providers.llm_openai import OpenAICompatLLM
@@ -358,12 +359,9 @@ def test_wake_word_hey_sam() -> None:
     section("Wake word 'Hey Sam'")
     from core import wake_word, wake_sam
     with _TempConfig() as cm:
-        check(wake_word.wake_engine() == "sam", "Hey Sam is the default engine")
         check(wake_word.wake_phrase() == "Hey Sam", "hints say 'Hey Sam'")
-        cm.update_config(wake_engine="jarvis")
-        check(wake_word.wake_phrase() == "Hey Jarvis", "the old engine can still be chosen")
-        cm.update_config(wake_engine="sam", wake_threshold=0.9)
-        check(abs(wake_word._sam_threshold() - 0.9) < 1e-9, "the threshold is configurable")
+        cm.update_config(wake_threshold=0.9)
+        check(abs(wake_word._threshold() - 0.9) < 1e-9, "the threshold is configurable")
 
     def res(*pairs):
         return {"result": [{"word": w, "conf": c} for w, c in pairs]}

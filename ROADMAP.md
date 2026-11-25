@@ -1,15 +1,15 @@
 # SAM Roadmap
 
-Approved by Sachin Verma on 2026-11-24. Base: MARK LVII. Every phase was tested (`python -m tests.sam_tests`, plus a real launch) before the next one started.
+Approved by Sachin Verma on 2026-11-24. Every phase was tested (`python -m tests.sam_tests`, plus a real launch) before the next one started.
 
-**Decisions:** Gemini Live stays the online brain · every user-visible name becomes SAM · internal code names (`JarvisLive`, `JarvisUI`, browser profile folder, phone pairing token) stay, so browser logins and pairing keep working.
+**Decisions:** Gemini Live stays the online brain · every user-visible name becomes SAM · internal code names (`SamLive`, `SamUI`, browser profile folder, phone pairing token) stay, so browser logins and pairing keep working.
 
 **Hardware target:** Intel i5-8250U (4 cores), 8 GB RAM, Intel UHD 620 (no CUDA). Local AI runs on the CPU.
 
 | # | Phase | Status | Result |
 |---|---|---|---|
 | 0 | Safety: atomic memory writes, dashboard off by default, error-classification fixes, quiet routine defaults | ✅ Done | Corrupt memory is set aside, not wiped; dashboard port 8765, starts only on REMOTE |
-| 1 | Rebrand to SAM, owner Sachin Verma | ✅ Done | 190 strings renamed; original author credited |
+| 1 | Rebrand to SAM, owner Sachin Verma | ✅ Done | Every name changed to SAM / Sachin Verma; attribution kept in LICENSE + NOTICE |
 | 2 | Hindi / English / Hinglish behaviour | ✅ Done | `preferred_language` setting; voice tool `sam_settings` |
 | 3 | Offline stack: Ollama + llama3.2:3b, Whisper small, Piper hi/en | ✅ Done | ~45–70 s warm-up once, then 5–17 s per reply; tool calls verified |
 | 4 | Automatic online/offline switching | ✅ Done | Engine mode `auto`; switches when the internet drops or returns |

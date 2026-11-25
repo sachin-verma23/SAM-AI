@@ -1048,7 +1048,7 @@ def _console(text: str) -> None:
     emoji raised UnicodeEncodeError on a non-UTF-8 console - cp1254 on a Turkish
     Windows, cp1251 on a Russian one, cp932 on a Japanese one - and because the
     print sat outside the tool's own try/except it escaped into the receive loop
-    and took the session down. Mark LV fixed that occurrence.
+    and took the session down. an earlier version fixed that occurrence.
 
     The first version of the timing report brought it straight back, with
     box-drawing characters, and made it worse: this print sits INSIDE

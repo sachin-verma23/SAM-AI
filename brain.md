@@ -1,12 +1,12 @@
 # brain.md — Everything about SAM
 
-> The complete map of **SAM** (built on MARK LVII) as it exists in this folder: what it is, how every piece works, where every setting lives, and how to customise it.
+> The complete map of **SAM** as it exists in this folder: what it is, how every piece works, where every setting lives, and how to customise it.
 > Read this before changing anything. For the list of bugs and gaps, see [AUDIT_REPORT.md](AUDIT_REPORT.md).
 
 ---
 
 ## Table of contents
-0. [SAM v1.0 — what was added](#0-sam-v10--what-was-added-on-top-of-mark-lvii)
+0. [SAM v1.0 — what changed](#0-sam-v10--what-changed)
 1. [What this project is](#1-what-this-project-is)
 2. [How to run it](#2-how-to-run-it)
 3. [Big picture: architecture](#3-big-picture-architecture)
@@ -38,9 +38,9 @@
 
 ---
 
-## 0. SAM v1.0 — what was added on top of MARK LVII
+## 0. SAM v1.0 — what changed
 
-SAM is MARK LVII customised for **Sachin Verma**. Everything below is new or changed; the rest of this document describes the original architecture, which still applies. Progress and test results: [ROADMAP.md](ROADMAP.md).
+SAM is SAM customised for **Sachin Verma**. Everything below is new or changed; the rest of this document describes the original architecture, which still applies. Progress and test results: [ROADMAP.md](ROADMAP.md).
 
 ### New files
 | File | What it does |
@@ -59,9 +59,9 @@ SAM is MARK LVII customised for **Sachin Verma**. Everything below is new or cha
 | `models/` (git-ignored) | `vosk-model-small-en-in-0.4/` (36 MB) and `gesture_recognizer.task` (8 MB) |
 
 ### Changed behaviour
-| Area | MARK LVII | SAM |
+| Area | Before | SAM v1.0 |
 |---|---|---|
-| Name | JARVIS | SAM, owner Sachin Verma, version "SAM v1.0" (`gui/theme.py`) |
+| Name | — | SAM, owner Sachin Verma, version "SAM v1.0" (`gui/theme.py`) |
 | Memory writes | in place; a crash could wipe `long_term.json` | temp file + rename; an unreadable file is kept as `.broken-<time>` |
 | Phone dashboard | always on, port 8000 | starts only when REMOTE is pressed (or `dashboard_enabled`); port `dashboard_port`, default 8765 |
 | Routines | check-in after 15 min, news every 30 min round the clock | check-in after 30 min (max hourly), news every 2 h 08:00–22:00, quiet hours 23:00–07:00 |
@@ -71,7 +71,7 @@ SAM is MARK LVII customised for **Sachin Verma**. Everything below is new or cha
 | Confirmation | shutdown, restart, Wi-Fi | plus delete, overwrite, move, organise desktop, send message, package installs (close app: optional) |
 | After CONFIRM / CANCEL | result only in the activity log | SAM is told the result and says it |
 | Memory panel | view, delete | view, edit (✎), add (+), delete |
-| Wake word | "Hey Jarvis" (openWakeWord) | "Hey Sam" (Vosk); `wake_engine: jarvis` brings the old one back |
+| Wake word | "Hey Sam" (openWakeWord) | "Hey Sam" (Vosk); `wake_engine: sam` brings the old one back |
 | Footer | engine + mic | AI (online/offline + model), NET, MIC, CAM, WAKE — live |
 | HUD | 30/20 Hz repaint | same, or 15/10 Hz with `ui_lite` |
 | Error "1007" | opened the API-key screen | only a real bad-key message does (`gemini.is_key_error`) |
@@ -104,7 +104,7 @@ Result (offline end-to-end test): warm-up ~65 s, then replies in **5–17 s**; "
 | `dashboard_enabled` | false | start the phone dashboard at launch |
 | `dashboard_port` | 8765 | HTTP port (HTTPS = +1) |
 | `confirm_actions` | see `core/policy.py` | e.g. `{"move_files": false, "close_app": true}` |
-| `wake_engine` | `sam` | sam (Vosk "Hey Sam") / jarvis (openWakeWord) |
+| `wake_engine` | `sam` | sam (Vosk "Hey Sam") / sam (openWakeWord) |
 | `wake_threshold` | 0.85 | Hey Sam word confidence; raise if it wakes by itself |
 | `gestures_enabled` | false | webcam gestures |
 | `gesture_actions` | see `core/gestures.py` | remap a gesture to any `computer_settings` action, `wake_sam`, or `""` |
@@ -124,7 +124,7 @@ Result (offline end-to-end test): warm-up ~65 s, then replies in **5–17 s**; "
 
 ## 1. What this project is
 
-- **Name:** **SAM**, owned by **Sachin Verma**, built on MARK LVII by **FatihMakes** (YouTube @FatihMakes). The assistant calls itself **SAM** by default; you can rename it.
+- **Name:** **SAM**, owned by **Sachin Verma**. The assistant calls itself **SAM** by default; you can rename it. Licence and attribution: see `LICENSE` and `NOTICE`.
 - **What it does:** a desktop voice assistant that **hears** (microphone), **speaks** (speakers), **sees** (screenshot or webcam, on request) and **controls the computer** (apps, keyboard, mouse, files, browser, settings), with long-term memory, reminders, routines and background research.
 - **Brain:** Google **Gemini Live API**. One WebSocket carries your audio in and the model's audio out, both transcripts, and tool calls. Optionally, a **local pipeline** replaces it: Whisper (speech-to-text) → any OpenAI-compatible LLM (Ollama, LM Studio, Groq…) → Piper, system voice or ElevenLabs (text-to-speech).
 - **Window:** PyQt6 "command-center" HUD with a 3-D reactor core or a holographic face that lip-syncs.
@@ -143,7 +143,7 @@ cd "c:\Users\Lenovo\Desktop\Projects\SAM AI"
 - `.venv` was created with **Python 3.14.7** (`py -3.14 -m venv .venv`) and filled with `setup.py`. Supported range: 3.11–3.13, so 3.12 or 3.13 is safer.
 - `setup.py` runs `pip install -r requirements.txt` (with OS markers) and `python -m playwright install chromium firefox`, then checks `core/face_model.obj`.
 - First launch: the setup overlay asks for a **Gemini API key** (from https://aistudio.google.com/apikey) and saves it to `config/api_keys.json`.
-- Stop it by saying "shut down" or "goodbye" (`shutdown_jarvis` tool), by closing the window, or with Ctrl+C in the terminal.
+- Stop it by saying "shut down" or "goodbye" (`shutdown_sam` tool), by closing the window, or with Ctrl+C in the terminal.
 - Self-test (no network or key needed): `.\.venv\Scripts\python.exe -m providers._tests`, which gives 99/99 passing.
 
 ---
@@ -152,13 +152,13 @@ cd "c:\Users\Lenovo\Desktop\Projects\SAM AI"
 
 ```
 ┌──────────────────────── Qt MAIN THREAD ───────────────────────────┐
-│ ui.py  JarvisUI  ── wraps ──>  gui/window.py  MainWindow          │
+│ ui.py  SamUI  ── wraps ──>  gui/window.py  MainWindow          │
 │   (thread-safe methods: write_log, set_state, show_content, …     │
 │    each just emits a pyqtSignal)                                  │
 └───────────────▲───────────────────────────────────────────────────┘
                 │ signals                    ▲ callbacks (text typed, buttons)
 ┌───────────────┴──── "runner" daemon THREAD: asyncio loop ─────────┐
-│ main.py  JarvisLive.run()                                         │
+│ main.py  SamLive.run()                                         │
 │   ├─ Gemini Live session  (or providers/engine_pipeline.py)       │
 │   ├─ TaskGroup per session:                                       │
 │   │    _listen_audio  → out_queue → _send_realtime → session      │
@@ -169,7 +169,7 @@ cd "c:\Users\Lenovo\Desktop\Projects\SAM AI"
 │   ├─ _execute_tool → inline tools / ActionRegistry / PluginRegistry│
 │   └─ dashboard server (FastAPI/uvicorn) on the same loop          │
 └──────────┬────────────────────────────────────────────────────────┘
-           │ run_in_executor (ThreadPool "jarvis", 32 workers)
+           │ run_in_executor (ThreadPool "sam", 32 workers)
 ┌──────────▼──── WORKER THREADS ────────────────────────────────────┐
 │ actions/*.py handlers, plugins/*.py run()                         │
 │ core/gemini.py one-shot calls (Live throwaway session or REST)    │
@@ -187,8 +187,8 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
 ### Root
 | File | Purpose |
 |---|---|
-| `main.py` | The heart: Live session, audio I/O, lip-sync extraction, tool dispatch, briefing, reconnect logic, shutdown. Class `JarvisLive`. |
-| `ui.py` | `JarvisUI`, the object passed to every tool as `player`. Thin thread-safe wrapper over `gui/window.MainWindow`. Also sets UI scale and re-exports old names. |
+| `main.py` | The heart: Live session, audio I/O, lip-sync extraction, tool dispatch, briefing, reconnect logic, shutdown. Class `SamLive`. |
+| `ui.py` | `SamUI`, the object passed to every tool as `player`. Thin thread-safe wrapper over `gui/window.MainWindow`. Also sets UI scale and re-exports old names. |
 | `setup.py` | OS-aware installer (pip + Playwright browsers + Python version check). |
 | `requirements.txt` | Dependencies (see §25). |
 | `AGENTS.md` | Rules for anyone (or any AI) writing code here: threading, plugins, model calls, GUI. **Read it before writing code.** |
@@ -239,7 +239,7 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
 | `viseme.py` | Transcript → mouth shapes (language-independent via Unicode reduction). |
 | `avatar.py`, `avatar_mesh.py`, `face_model.obj` | Software-rendered 3-D head (MediaPipe face mesh, Apache-2.0). |
 | `hotkey.py` | Push-to-talk (Ctrl+Space). Global on Windows via `GetAsyncKeyState` polling. |
-| `wake_word.py` | Local "Hey Jarvis" via `openwakeword` (optional install). |
+| `wake_word.py` | Local "Hey Sam" via `openwakeword` (optional install). |
 | `platform_support.py` | Detects Wayland or missing macOS permissions; tells the user and the model. |
 | `lazyimport.py` | `LazyModule` proxy so `pyautogui` and `playwright` load only when used. |
 | `tls.py` | HTTPS trusts system roots **plus** certifi (fixes SSL errors on Windows). |
@@ -248,7 +248,7 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
 | `routines/` | Routine engine (see §14). |
 | `cloud.py` | "Second body" server for a VPS with Telegram. **Not reachable:** its plugin `cloud_agent.py` is missing. Can be run as `python -m core.cloud`. |
 | `screenview.py`, `screenact.py` | Accessibility-tree screen reading and clicking. **Orphaned:** used by the missing `screen_agent` plugin. |
-| ~~`stt.py`, `tts.py`, `llm_client.py`, `installer.py`~~ | Dead legacy code ("MARK XL") — **removed in SAM**. |
+| ~~`stt.py`, `tts.py`, `llm_client.py`, `installer.py`~~ | Dead legacy code — **removed in SAM**. |
 
 ### `gui/`: the window
 | File | Purpose |
@@ -259,7 +259,7 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
 | `providers_panel.py` | ENGINE & PROVIDERS panel (form generated from provider declarations). |
 | `hud.py` | Centre canvas: avatar or reactor, state line, waveform, lip-sync schedule. |
 | `reactor.py` | 3-D reactor core (QPainter + numpy, cached layers, about 5 ms per frame). |
-| `theme.py` | Palette class `C`, `APP_VERSION = "MARK LVII"`, live re-theme. |
+| `theme.py` | Palette class `C`, `APP_VERSION = "SAM"`, live re-theme. |
 | `style.py` | Fonts (`hud_font`, `mono_font`, `px_font`), colour mixing, button CSS. |
 | `metrics.py` | CPU, RAM, network, GPU (pynvml), temperature sampling for the HUD. |
 
@@ -277,7 +277,7 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
 | `dashboard/` | Phone remote control: `server.py` (FastAPI) plus `static/app.html` and `login.html`. |
 | `agents/` | Background agent profiles: `general.md`, `researcher.md`. |
 | `plugins/` | Drop-in skills. **Only `_template.py` is present.** |
-| `config/` | `__init__.py` (OS helpers), `jarvis.ico`, `api_keys.json` (your settings and key). |
+| `config/` | `__init__.py` (OS helpers), `sam.ico`, `api_keys.json` (your settings and key). |
 
 ---
 
@@ -287,13 +287,13 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
    - On Windows, patches `subprocess.Popen` so every child process gets `CREATE_NO_WINDOW` (no flashing consoles).
    - Reconfigures stdout and stderr to UTF-8 (emoji in logs would otherwise crash non-UTF-8 consoles).
    - `core.tls.install()`: HTTPS trusts system plus certifi roots.
-2. Imports: sounddevice, numpy, google-genai, `ui.JarvisUI`, memory, actions helpers, core modules.
+2. Imports: sounddevice, numpy, google-genai, `ui.SamUI`, memory, actions helpers, core modules.
 3. **`main()`** (line 3052):
-   - `ui = JarvisUI("face.png")`: sets the UI scale (`ui_scale` config or automatic from screen height on Windows), creates the **single** `QApplication`, builds `MainWindow` and shows it. If there is no key, the window shows the **SetupOverlay**.
+   - `ui = SamUI("face.png")`: sets the UI scale (`ui_scale` config or automatic from screen height on Windows), creates the **single** `QApplication`, builds `MainWindow` and shows it. If there is no key, the window shows the **SetupOverlay**.
    - Starts the daemon thread `runner()`, then `ui.root.mainloop()` (Qt event loop) blocks the main thread.
 4. **`runner()`:**
    - `ui.wait_for_api_key()`: polls `MainWindow._ready` every 0.1 s until setup is done.
-   - `JarvisLive(ui)` (line 592) constructor:
+   - `SamLive(ui)` (line 592) constructor:
      - Sets up state (speaking flag, queues, vision flags, PTT, echo guard, lip-sync stream, resumption handle…).
      - Wires UI callbacks: `on_text_command`, `on_remote_clicked`, `on_interrupt`, `on_voice_change`, `on_audio_device_change`, `on_push_to_talk`, `ptt_hold`.
      - **`discover_actions(actions/)`** → `ActionRegistry` (names may not collide with the 8 inline tools).
@@ -302,8 +302,8 @@ detector, push-to-talk poller, metrics sampler, audio-device prefetch.
      - `core.tasks.desktop.attach(ui)`: starts the task engine and **resumes interrupted tasks**.
      - `core.routines.desktop.attach(CallbackHost(...))`: starts the routine engine; on first run it seeds the built-in routines. If this fails, `_routines = None` and the old fixed schedules run instead.
      - Wake-word state (`wake_word_enabled`), push-to-talk restore.
-   - `asyncio.run(jarvis.run())`.
-5. **`JarvisLive.run()`** (line 2696):
+   - `asyncio.run(sam.run())`.
+5. **`SamLive.run()`** (line 2696):
    - Binds the confirm gate to the UI (`show_confirm` / `hide_confirm`), memory-trim notifier, audio device rates (16 kHz in, 24 kHz out), prefetches the device list.
    - Starts the **dashboard server** (always) and its command-relay task.
    - **Connect loop** (`while True`):
@@ -346,7 +346,7 @@ The input box calls `on_text_command(text)` → `_on_text_command` → `session.
 - `response.data` (24 kHz PCM) is sliced into 2400-byte (50 ms) chunks → `audio_in_queue` (discarded while `_interrupted`).
 - `output_transcription` → de-duplicated → `out_buf` and the lip-sync text feed.
 - `input_transcription` → `in_buf` and `_last_user_speech = now`.
-- `turn_complete` → logs `You: …` and `JARVIS: …` to the activity log, `_session_log` (used for the end-of-session summary) and the dashboard; handles camera auto-close.
+- `turn_complete` → logs `You: …` and `SAM: …` to the activity log, `_session_log` (used for the end-of-session summary) and the dashboard; handles camera auto-close.
 - `tool_call` → for each function call, `await _execute_tool(fc)` (serially), then `send_tool_response`, then `_flush_pending_vision()` (sends a captured image right after the tool response).
 
 ### Playing
@@ -407,7 +407,7 @@ Constants are in `main.py` lines 119-189 (`SEND_SAMPLE_RATE`, `RECEIVE_SAMPLE_RA
 ## 9. Tools: how the model acts
 
 ### Three sources of tools
-1. **Inline** (in `main.py`, `TOOL_DECLARATIONS` line 385). These are tied to live-session state: `system_status`, `screen_process`, `close_camera`, `manage_monitor`, `shutdown_jarvis`, `save_memory`, `recall_memory`, `undo`.
+1. **Inline** (in `main.py`, `TOOL_DECLARATIONS` line 385). These are tied to live-session state: `system_status`, `screen_process`, `close_camera`, `manage_monitor`, `shutdown_sam`, `save_memory`, `recall_memory`, `undo`.
 2. **Actions** (`actions/*.py` with a module-level `TOOL` dict):
    ```python
    TOOL = {
@@ -449,7 +449,7 @@ Constants are in `main.py` lines 119-189 (`SEND_SAMPLE_RATE`, `RECEIVE_SAMPLE_RA
 | **screen_process** | `angle` screen/camera, `text` question | Captures with mss or OpenCV, compresses, sends the image into the same session labelled `[IMAGE SOURCE: SCREEN CAPTURE]` or `[IMAGE SOURCE: WEBCAM]`. The camera view stays on the HUD and auto-closes about 2 s after the answer. |
 | **close_camera** | none | Closes the camera view. |
 | **manage_monitor** | `action` add/remove/list, `topic` | News topics checked by the News-watch routine (DDG news, new-headline hash). Refuses crypto and finance topics. |
-| **shutdown_jarvis** | none | Spoken goodbye plus session summary in parallel, stop the engines, exit the process. |
+| **shutdown_sam** | none | Spoken goodbye plus session summary in parallel, stop the engines, exit the process. |
 | **save_memory** | `category`, `key`, `value` (English) | Silent write to `long_term.json`. |
 | **recall_memory** | `query` (empty = all) | Local keyword search over stored facts. |
 | **undo** | `action` undo/list | Reverses the last change the assistant made (files and settings). |
@@ -468,7 +468,7 @@ Constants are in `main.py` lines 119-189 (`SEND_SAMPLE_RATE`, `RECEIVE_SAMPLE_RA
 | **video_player** | `action` play/stop/mute/unmute/forward/back/seek_to/pause/resume, `source`, `source_type`, `seconds`, `position` | Plays on the HUD (QtMultimedia); YouTube via yt-dlp (separate video and audio streams kept in sync); starts **muted**. Also shows pictures. |
 | **youtube_video** | `action` play/summarize/get_info/trending, `query`, `url`, `region`, `save` | Opens or plays, summarises from the transcript (youtube-transcript-api) via Gemini. |
 | **code_helper** | `action` write/edit/explain/run/build/auto, `description`, `language`, paths, `timeout` | Single-file coding with Gemini SMART (60 s). |
-| **dev_agent** | `mode` build/improve/status, `description`, `folder`, `language`, `project_name` | Multi-file agent. *build* creates `Desktop/JarvisProjects/<name>`, plans, writes, installs dependencies, runs and fixes. *improve* scans a folder (reads AGENTS.md or CLAUDE.md), plans changes, writes, runs checks and tests (`core/code_checks.py`). Live progress in the panel. Uses `coding_provider` if set. |
+| **dev_agent** | `mode` build/improve/status, `description`, `folder`, `language`, `project_name` | Multi-file agent. *build* creates `Desktop/SamProjects/<name>`, plans, writes, installs dependencies, runs and fixes. *improve* scans a folder (reads AGENTS.md or CLAUDE.md), plans changes, writes, runs checks and tests (`core/code_checks.py`). Live progress in the panel. Uses `coding_provider` if set. |
 | **flight_finder** | `origin`, `destination`, `date`, `return_date`, `passengers`, `cabin`, `save` | Opens Google Flights in Playwright, parses with Gemini, speaks the best options. |
 | **game_updater** | `action` update/install/list/download_status/schedule…, `platform` steam/epic/both, `game_name`, `app_id`, `hour`, `minute`, `shutdown_when_done` | Finds Steam and Epic installs and manifests, drives the launchers, schedules daily updates. |
 | **desktop_control** | `action` wallpaper/wallpaper_url/current_wallpaper/organize/clean/list/stats, `path`, `url`, `mode` | Wallpaper (verified and reversible), tidy desktop files. |
@@ -539,7 +539,7 @@ Written only through `memory/config_manager.py` (atomic tmp+rename plus a lock; 
 | `ui_color` | `#00d4ff` | Accent colour (hue-linked palette). |
 | `hud_style` | "face" | "face" (holographic head) or "core" (3-D reactor). |
 | `ui_scale` | auto | 0.5–3 Qt scale override. |
-| `wake_word_enabled` | false | "Hey Jarvis" gate. |
+| `wake_word_enabled` | false | "Hey Sam" gate. |
 | `push_to_talk_enabled` | false | Hold Ctrl+Space. |
 | `morning_brief_enabled` | true | Mirrors the Opening-briefing routine switch. |
 | `proactive_audio` | true | Model ignores speech not aimed at it. |
@@ -648,13 +648,13 @@ Other uses: **sidecar** (one-shot calls go to another model when Gemini's text q
 
 ## 18. The GUI
 
-- **One `QApplication`**, created in `JarvisUI.__init__`. Fusion style.
+- **One `QApplication`**, created in `SamUI.__init__`. Fusion style.
 - **Layout (`MainWindow`):** header (logo, clock, state chip, buttons) · left column (ring gauges for CPU, RAM, GPU and temperature, network sparkline, identity rows, TASKS / ROUTINES panel) · centre HUD (avatar or reactor, waveform, state; also the video, picture and camera surface) · right column (activity log in transcript style, file drop zone, content panel) · input row (text box, send, mute, interrupt) · drawers (quick drawer and CONTROLS drawer) · status strip.
 - **States:** `LISTENING`, `SPEAKING`, `THINKING`, `SLEEPING`.
 - **Overlays:** Setup (API key) · Customise (assistant name, your name, voice, colour wheel or hex) · Plugin manager · Plugin settings · Confirm banner · Audio devices (pick, test meter, volume) · Memory panel · Remote QR · ENGINE & PROVIDERS · Clipboard panel (Translate / Summarise / Explain / Fix).
-- **CONTROLS drawer toggles:** wake word (install, enable, wake now), push-to-talk, morning brief, HUD style face/core, autostart (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value `JARVIS_AI`), desktop shortcut, fullscreen.
+- **CONTROLS drawer toggles:** wake word (install, enable, wake now), push-to-talk, morning brief, HUD style face/core, autostart (`HKCU\Software\Microsoft\Windows\CurrentVersion\Run` value `SAM_AI`), desktop shortcut, fullscreen.
 - **Thread-safe API** (call from any thread through `player`): `write_log`, `set_state`, `show_content(title≤48, text≤4000)`, `show_code_job`, `show_quiz`, `hide_quiz`, `show_review`, `show_video`, `show_image`, `stop_video`, `set_video_muted`, `seek_video`, `pause_video`, `video_state`, `start_camera_stream`, `stop_camera_stream`, `show_camera_frame`, `show_confirm`, `hide_confirm`, `prompt_reconfig`, `push_visemes`, `set_audio_level`, `glance`, `request_say`, `tool_catalog`, `run_tool`, `muted`, `current_file`, `assistant_name`.
-- **Pattern for a new cross-thread UI feature:** add a `pyqtSignal` to `MainWindow`, connect it in `__init__`, add a thin `JarvisUI` method that only emits it (copy `show_content` → `_content_sig` → `_show_content`).
+- **Pattern for a new cross-thread UI feature:** add a `pyqtSignal` to `MainWindow`, connect it in `__init__`, add a thin `SamUI` method that only emits it (copy `show_content` → `_content_sig` → `_show_content`).
 - **Theme:** palette class `C` in `gui/theme.py` (BG `#00060a`, PRI `#00d4ff`, ACC `#ff6b00`, GREEN `#00ff88`, RED `#ff3355`, TEXT `#8ffcff`…). Stylesheets must use only these hex values so the live re-theme can swap them. Fonts come only from `gui/style.py` (Bahnschrift on Windows).
 
 ---
@@ -671,7 +671,7 @@ Other uses: **sidecar** (one-shot calls go to another model when Gemini's text q
 
 ## 20. Wake word, push-to-talk, echo guard, lip-sync
 
-- **Wake word** (`core/wake_word.py` → `core/wake_sam.py`): SAM listens for **"Hey Sam"** with Vosk (or the original openWakeWord "Hey Jarvis" with `wake_engine: jarvis`), on its own thread, mic frames pushed by a queue. While asleep **nothing is streamed** to Gemini. Wake by saying "Hey Sam", pressing WAKE NOW, holding the push-to-talk key, or a remote command. Auto-sleeps after 120 s with no speech. Installed with one click from CONTROLS.
+- **Wake word** (`core/wake_word.py` → `core/wake_sam.py`): SAM listens for **"Hey Sam"** with Vosk (or the original openWakeWord "Hey Sam" with `wake_engine: sam`), on its own thread, mic frames pushed by a queue. While asleep **nothing is streamed** to Gemini. Wake by saying "Hey Sam", pressing WAKE NOW, holding the push-to-talk key, or a remote command. Auto-sleeps after 120 s with no speech. Installed with one click from CONTROLS.
 - **Push-to-talk** (`core/hotkey.py`): Ctrl+Space; global on Windows (polls `GetAsyncKeyState` 30 times a second), window-only elsewhere. With a local engine, the key release ends the turn.
 - **Echo guard** (`core/echo.py`): compares band energies of the mic against what is playing and calibrates itself. Used only for the echo tail; voice barge-in is disabled.
 - **Lip-sync:** audio formants (timing and vowels) plus transcript visemes (`core/viseme.py`, which knows closures such as m, b and p), scheduled against the real playback time. About 50 shapes a second. Biased to lead the audio slightly, never lag.
@@ -699,15 +699,15 @@ In `run()`'s `except BaseException`:
 
 ## 22. Shutdown
 
-- **By voice (`shutdown_jarvis`):** send "say a brief goodbye", wait for the turn to complete and the speaking to end (max 8 + 6 s), **and in parallel** save the session summary (max 12 s). Then `_stop_engines()` (routines stop; the running task stays "running" on disk and resumes next launch), then `_exit_process(0)` (atexit handlers, flush, `os._exit`).
-- **By closing the window:** `mainloop` returns → `jarvis.finish()` (summary within 15 s, stop the engines) → `_exit_process(0)`.
+- **By voice (`shutdown_sam`):** send "say a brief goodbye", wait for the turn to complete and the speaking to end (max 8 + 6 s), **and in parallel** save the session summary (max 12 s). Then `_stop_engines()` (routines stop; the running task stays "running" on disk and resumes next launch), then `_exit_process(0)` (atexit handlers, flush, `os._exit`).
+- **By closing the window:** `mainloop` returns → `sam.finish()` (summary within 15 s, stop the engines) → `_exit_process(0)`.
 
 ---
 
 ## 23. Threads and concurrency rules
 
 1. **Only the Qt main thread touches widgets.** Tools must never create a `QWidget`, `QApplication`, `QThread` or `QDialog` (AGENTS.md). Use `player.*`.
-2. Tools run in the loop's ThreadPoolExecutor (32 workers, prefix `jarvis`).
+2. Tools run in the loop's ThreadPoolExecutor (32 workers, prefix `sam`).
 3. The Live session, queues and `send_*` belong to the asyncio loop thread. From other threads use `asyncio.run_coroutine_threadsafe(..., self._loop)` (as `plugin_say`, `speak` and `_on_text_command` do).
 4. `_speaking_lock` guards `_is_speaking`.
 5. Config writes are locked and atomic; memory writes are locked but **not** atomic.
@@ -728,7 +728,7 @@ In `run()`'s `except BaseException`:
 | `uploads/` | Phone uploads | Yes |
 | `providers/voices/` | Piper voices | Yes (re-downloaded) |
 | `%LOCALAPPDATA%\ms-playwright` | Chromium and Firefox for Playwright | Re-run `playwright install` |
-| `Desktop/JarvisProjects/` | `dev_agent` build output | Yours |
+| `Desktop/SamProjects/` | `dev_agent` build output | Yours |
 | Windows Task Scheduler entries | Reminders and game-update schedules | Remove in Task Scheduler |
 
 ---
@@ -793,7 +793,7 @@ The README describes ~22 plugins that **are not in the GitHub repo** (only `plug
 | **Inline tool** | A tool declared in `main.py`. |
 | **Action** | A bundled tool in `actions/` (PC control). |
 | **Plugin** | A drop-in skill in `plugins/`. |
-| **player** | The `JarvisUI` object given to tools. |
+| **player** | The `SamUI` object given to tools. |
 | **Outcome** | The `status=…` result line for the model. |
 | **Untrusted wrapper** | `<<<UNTRUSTED …>>>` markers around external text. |
 | **Routine** | A scheduled or unprompted action. |

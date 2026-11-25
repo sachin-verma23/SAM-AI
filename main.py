@@ -58,7 +58,7 @@ import sounddevice as sd
 import numpy as np
 from google import genai
 from google.genai import types
-from ui import JarvisUI
+from ui import SamUI
 from memory.memory_manager import (
     load_memory, update_memory, format_memory_for_prompt,
     save_session_summary, pop_last_session,
@@ -69,7 +69,7 @@ from memory.memory_manager import (
 # imported or declared here — they self-describe via a TOOL dict in their own
 # actions/*.py file and are auto-discovered by core.action_loader at startup.
 # Only tools that are tied to live-session state stay inline in this file
-# (screen_process, close_camera, save_memory, manage_monitor, shutdown_jarvis,
+# (screen_process, close_camera, save_memory, manage_monitor, shutdown_sam,
 # system_status).
 from core import outcome
 from core.action_loader import strip_meta
@@ -453,7 +453,7 @@ TOOL_DECLARATIONS = [
     # handling is woven into live-session state — vision capture/injection,
     # camera stream, memory writes, the monitor engine, and shutdown. All other
     # tools live in their own action file and are auto-discovered by
-    # core.action_loader (see JarvisLive.__init__).
+    # core.action_loader (see SamLive.__init__).
     {
         "name": "system_status",
         "description": (
@@ -521,7 +521,7 @@ TOOL_DECLARATIONS = [
     },
     {
         "tier": "core",          # local engines keep it under a tight tool budget
-        "name": "shutdown_jarvis",
+        "name": "shutdown_sam",
         "description": (
             "Shuts down the assistant completely. "
             "Call this when the user expresses intent to end the conversation, "
@@ -558,7 +558,7 @@ TOOL_DECLARATIONS = [
                     )
                 },
                 "key":   {"type": "STRING", "description": "Short snake_case key (e.g. name, favorite_food, sister_name)"},
-                "value": {"type": "STRING", "description": "Concise value in English (e.g. Fatih, pizza, older sister)"},
+                "value": {"type": "STRING", "description": "Concise value in English (e.g. Sachin, pizza, older sister)"},
             },
             "required": ["category", "key", "value"]
         }
@@ -684,8 +684,8 @@ def _keep_context_of(exc: BaseException) -> bool:
     return True
 
 
-class JarvisLive:
-    def __init__(self, ui: JarvisUI):
+class SamLive:
+    def __init__(self, ui: SamUI):
         # Platform limits are announced once per run, not once per
         # reconnect: a dropped connection is not news about Wayland.
         self._platform_notes_shown = False
@@ -1328,7 +1328,7 @@ class JarvisLive:
             if getattr(loop, "_executor_shutdown_called", False):
                 loop._executor_shutdown_called = False
             loop.set_default_executor(
-                ThreadPoolExecutor(max_workers=32, thread_name_prefix="jarvis"))
+                ThreadPoolExecutor(max_workers=32, thread_name_prefix="sam"))
 
     async def _watch_reconnect(self):
         """Session-scoped task: when a voluntary reconnect is requested, raise a
@@ -1884,7 +1884,7 @@ class JarvisLive:
                 else:
                     result = "Specify action (add/remove/list) and a topic."
 
-            elif name == "shutdown_jarvis":
+            elif name == "shutdown_sam":
                 self.ui.write_log("SYS: Shutdown requested.")
                 async def _do_shutdown():
                     # The goodbye is said while the summary is written, and the
@@ -1924,7 +1924,7 @@ class JarvisLive:
                 #
                 # Decided HERE, not left to the model. Told plainly in the tool
                 # description, it still answered "create a quiz plugin" with
-                # mode='build' — a brand-new project in Desktop/JarvisProjects,
+                # mode='build' — a brand-new project in Desktop/SamProjects,
                 # nowhere near the folder the user had just handed it. Somebody
                 # who loads a folder and asks for something means "in this
                 # folder", so every coding request goes there; clearing the
@@ -2023,7 +2023,7 @@ class JarvisLive:
                     det.feed(indata)
                 return
             with self._speaking_lock:
-                jarvis_speaking = self._is_speaking
+                sam_speaking = self._is_speaking
 
             # ── Barge-in ─────────────────────────────────────────────────────
             # While SAM talks the mic is not streamed, but it is still worth
@@ -2034,7 +2034,7 @@ class JarvisLive:
             # So the test is not "is the mic loud" but "is the mic louder than
             # the echo of what we are playing right now", sustained long enough
             # that a cough or a keystroke cannot trigger it.
-            if jarvis_speaking:
+            if sam_speaking:
                 # Nothing is streamed while SAM talks.
                 #
                 # Interrupting by voice used to live here: `EchoGuard` can pick a
@@ -2274,7 +2274,7 @@ class JarvisLive:
                                 _history_append("assistant", full_out)
                                 if self._dashboard:
                                     asyncio.create_task(self._dashboard.broadcast({
-                                        "type": "log", "speaker": "jarvis",
+                                        "type": "log", "speaker": "sam",
                                         "text": full_out,
                                         "ts": datetime.now().isoformat(),
                                     }))
@@ -3365,15 +3365,15 @@ def _exit_process(code: int = 0) -> None:
 
 
 def main():
-    ui = JarvisUI("face.png")
+    ui = SamUI("face.png")
     holder: dict = {}
 
     def runner():
         ui.wait_for_api_key()
-        jarvis = JarvisLive(ui)
-        holder["jarvis"] = jarvis
+        sam = SamLive(ui)
+        holder["sam"] = sam
         try:
-            asyncio.run(jarvis.run())
+            asyncio.run(sam.run())
         except KeyboardInterrupt:
             print("\n🔴 Shutting down...")
 
@@ -3381,10 +3381,10 @@ def main():
     ui.root.mainloop()
 
     # The window is closed: write the session summary, stop the engines, go.
-    jarvis = holder.get("jarvis")
-    if jarvis is not None:
+    sam = holder.get("sam")
+    if sam is not None:
         try:
-            jarvis.finish()
+            sam.finish()
         except Exception as e:
             print(f"[SAM] finish: {e!r}")
     _exit_process(0)

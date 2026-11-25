@@ -1,6 +1,6 @@
 """gui/widgets.py — Small building blocks of the HUD: metric bars, the activity log, file drop, camera preview.
 
-Split out of ui.py in Mark LVII; behaviour unchanged."""
+Split out of ui.py in SAM; behaviour unchanged."""
 from __future__ import annotations
 
 import json
@@ -144,7 +144,7 @@ class LogWidget(QTextEdit):
         self._pos     = 0
         self._tag     = "sys"
         self._fmt     = QTextCharFormat()
-        self._ai_name_lc = "jarvis"   # updated when assistant name changes
+        self._ai_name_lc = "sam"   # updated when assistant name changes
         self._tmr = QTimer(self)
         self._tmr.timeout.connect(self._step)
         self._sig.connect(self._enqueue)
@@ -163,7 +163,7 @@ class LogWidget(QTextEdit):
         tl = text.lower()
         if tl.startswith("you:"):
             return "you", "YOU", rest.strip()
-        if sep and (tl.startswith(f"{self._ai_name_lc}:") or tl.startswith("jarvis:")):
+        if sep and (tl.startswith(f"{self._ai_name_lc}:") or tl.startswith("sam:")):
             return "ai", head.strip().upper(), rest.strip()
         key = head.strip().lower()
         if sep and key in self._TAGS:
@@ -273,7 +273,7 @@ def _fmt_size(size: int) -> str:
 # the count of files the coding model will actually look at.
 _SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", "venv", ".venv", "env",
               "__pycache__", ".mypy_cache", ".pytest_cache", "dist", "build",
-              ".idea", ".vscode", ".next", "target", ".jarvis_backup"}
+              ".idea", ".vscode", ".next", "target", ".sam_backup"}
 
 
 def _count_files(folder: Path, cap: int = 5000) -> int:
@@ -559,7 +559,7 @@ class _CameraPreview(QWidget):
 
 
 # ═════════════════════════════════════════════════════════════════════════════
-#  Mark LVII building blocks
+#  SAM building blocks
 # ═════════════════════════════════════════════════════════════════════════════
 # All painted rather than styled: a stylesheet cannot cut a corner or light an
 # edge, and painting reads the palette at paint time, so every one of these

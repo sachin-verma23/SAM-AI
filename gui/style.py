@@ -1,4 +1,4 @@
-"""gui/style.py — the Mark LVII look: type, colour mixing, shapes, button styles.
+"""gui/style.py — the SAM look: type, colour mixing, shapes, button styles.
 
 Everything visual that more than one panel needs lives here, so the HUD has
 one voice instead of forty slightly different ones.

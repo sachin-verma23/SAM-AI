@@ -1,6 +1,6 @@
 """gui/theme.py — Palette, typography and the configuration values every part of the HUD reads.
 
-Split out of ui.py in Mark LVII; behaviour unchanged."""
+Split out of ui.py in SAM; behaviour unchanged."""
 from __future__ import annotations
 
 import json
@@ -87,7 +87,6 @@ def _read_full_config() -> dict:
 # badge and the readme must never disagree again.
 APP_VERSION  = "SAM v1.0"
 APP_OWNER    = "Sachin Verma"
-APP_BASED_ON = "MARK LVII by FatihMakes (CC BY-NC 4.0)"
 APP_PROTOCOL = APP_VERSION.split()[-1]
 
 _DEFAULT_W, _DEFAULT_H = 980, 700

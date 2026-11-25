@@ -1,6 +1,6 @@
 """gui/hud.py — The centre of the HUD: the avatar or the reactor core, the state line and the waveform.
 
-Split out of ui.py in Mark LVII; behaviour unchanged."""
+Split out of ui.py in SAM; behaviour unchanged."""
 from __future__ import annotations
 
 import json

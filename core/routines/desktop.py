@@ -3,7 +3,7 @@
 main.py builds a host from its own session (can the assistant speak, how long
 has the user been quiet, how to put words in its mouth) and calls attach().
 The first time, the built-in routines are created from what the app did before
-Mark LVII, so nobody loses a morning briefing to an upgrade:
+SAM, so nobody loses a morning briefing to an upgrade:
 
     opening      the startup briefing — on if the MORNING BRIEF switch was on
     check-in     the proactive check-in after 30 quiet minutes, at most hourly

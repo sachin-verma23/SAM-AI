@@ -1,6 +1,6 @@
-# Mark LVII (JARVIS) — Audit Report
+# SAM (SAM) — Audit Report
 
-**Repo:** https://github.com/FatihMakes/Mark-LVII (commit `752ff61`)
+**Repo:** https://github.com/sachin-verma23/SAM-AI (baseline commit `752ff61`)
 **Local copy:** `c:\Users\Lenovo\Desktop\Projects\SAM AI`
 **Audit date:** 2026-11-24
 **Scope:** All 106 tracked files (~56,600 lines). I read every entry point, `main.py` and the memory and config layer in full. For every other module I read its docstring and structure, and the parts that matter in detail. I also ran the project's own self-test and git checks, and used the app's logs from this session.
@@ -79,7 +79,7 @@ Knock-on effects:
 - **Unused dependencies in `requirements.txt`:** `tinytuya`, `paho-mqtt`, `google-api-python-client`, `google-auth-oauthlib`. No file imports them.
 - The UI and prompt still mention features that are not there, for example `show_quiz`, `show_review`, `generate_image` in tool descriptions, and the `[FOLDER_UPLOADED]` flow.
 
-**Fix:** either get the plugin files from the author (YouTube, Instagram or GitHub issues) or write your own. Meanwhile, update the README and requirements, and decide whether to keep `core/cloud.py`, `screenview.py` and `screenact.py`.
+**Fix:** write the plugins you need yourself. Meanwhile, update the README and requirements, and decide whether to keep `core/cloud.py`, `screenview.py` and `screenact.py`.
 
 #### H2. The phone dashboard always runs, on your whole network, unencrypted by default
 **Files:** [main.py:2720-2730](main.py#L2720-L2730), [dashboard/server.py](dashboard/server.py)
@@ -110,7 +110,7 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 | M1 | **"1007" treated as a bad API key** | [main.py:2991](main.py#L2991) | Any error containing `1007` opens the "re-enter your API key" screen. 1007 is the generic WebSocket "invalid payload" close code; `core/gemini.py` itself says unsupported modalities return 1007. `core.gemini.is_key_error()` (the correct check) is not used here. |
 | M2 | Network-error detection by message text | [main.py:3002-3005](main.py#L3002-L3005) | It looks for words like `"TimeoutError"` and `"OSError"` inside `str(e)`. A bare `TimeoutError()` has an empty message, so it is not seen as a network error and the backoff never grows. |
 | M3 | `user_data` silently falls back to **random fake data** | [actions/computer_control.py:659-666](actions/computer_control.py#L659-L666) | If your name or email is not in memory, it returns a random name or email as if it were yours. The model can type that into a real form. |
-| M4 | Coding agent installs packages **into JARVIS's own venv** | [actions/dev_agent.py:265-293](actions/dev_agent.py#L265-L293) | Uses `sys.executable -m pip install <model-chosen names>`. A hallucinated or typo-squatted name gets installed, and a dependency conflict can break the assistant itself. |
+| M4 | Coding agent installs packages **into SAM's own venv** | [actions/dev_agent.py:265-293](actions/dev_agent.py#L265-L293) | Uses `sys.executable -m pip install <model-chosen names>`. A hallucinated or typo-squatted name gets installed, and a dependency conflict can break the assistant itself. |
 | M5 | `_open_vscode` always "succeeds" | [actions/dev_agent.py:300-318](actions/dev_agent.py#L300-L318) | `Popen(..., shell=True)` returns as soon as a shell starts. That is the same false-success bug the project fixed in `open_app`. |
 | M6 | Weather tool doesn't fetch weather | [actions/weather_report.py](actions/weather_report.py) | It only opens a Google search in the browser and says "Showing the weather". The README says "Live weather data". The assistant cannot speak the forecast. |
 | M7 | Tool calls run one after another inside the receive loop | [main.py:2077-2086](main.py#L2077-L2086) | Several function calls in one turn run serially, so one slow tool (for example `close_app`, 6 s in this session's log) delays the others. |
@@ -124,14 +124,14 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 | # | Issue | Where |
 |---|---|---|
 | L1 | Hard-coded **"Sir"** in spoken errors, which ignores the user-name and address rules | `main.py:1374`, `core/plugin_loader.py:129`, `actions/weather_report.py:14,29,33`, `actions/code_helper.py:494`, `plugins/_template.py:58` |
-| L2 | Dead legacy code from "MARK XL", never imported: `core/stt.py`, `core/tts.py`, `core/llm_client.py`, `core/installer.py` (~1,260 lines) | `core/` |
+| L2 | Dead legacy code, never imported: `core/stt.py`, `core/tts.py`, `core/llm_client.py`, `core/installer.py` (~1,260 lines) | `core/` |
 | L3 | `dashboard/static/crypto-js.min.js` (60 KB) is unused; `app.html` says it was replaced by WebCrypto | `dashboard/static/` |
-| L4 | `JarvisUI("face.png")`: the file does not exist and the argument is unused | `main.py:3053` |
+| L4 | `SamUI("face.png")`: the file does not exist and the argument is unused | `main.py:3053` |
 | L5 | Typo `self._asst_name = "JARVI    S"` (overwritten on first connect, so harmless) | `main.py:598` |
 | L6 | A global `subprocess.Popen` monkey-patch drops every caller's `startupinfo` | `main.py:6-15` |
 | L7 | `asyncio.create_task(self._dashboard.broadcast(...))` without keeping a reference (the project's own `_keep_task()` exists for this) | `main.py:2042, 2061` |
 | L8 | Leftover `_get_api_key()` helpers are copied into several actions. Model calls do go through `core.gemini` correctly, but each copy re-reads `api_keys.json` on its own | `code_helper.py`, `computer_control.py`, `desktop.py`, `flight_finder.py`, `web_search.py`, `youtube_video.py`, `dev_agent.py` |
-| L9 | README errors: plugin locations, "HTTP by default" vs the dashboard docstring, `setup.py` banner says "MARK LIV" | `readme.md`, `setup.py`, `dashboard/server.py` |
+| L9 | README errors: plugin locations, "HTTP by default" vs the dashboard docstring, `setup.py` banner showed an old version name | `readme.md`, `setup.py`, `dashboard/server.py` |
 | L10 | API keys are stored in plain text (documented, but worth knowing) | `config/api_keys.json` |
 | L11 | `manage_monitor` refuses crypto, finance and trading topics. This is a policy choice; remove it if you want those topics | `main.py:440`, `actions/background_monitor.py` |
 | L12 | `setup.py` prints a broken pywin32 post-install path (`Scripts\Scripts\…`). I fixed it manually during install | `setup.py` |
@@ -153,7 +153,7 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 | Barge-in by voice | ❌ disabled | Code exists in `core/echo.py` but is switched off; use the INTERRUPT button |
 | Echo guard (does not answer itself) | ✅ | |
 | Push-to-talk (Ctrl+Space) | ✅ | Global on Windows |
-| Wake word "Hey Jarvis" | ⚠️ | One-click install; Python 3.14 risk |
+| Wake word "Hey Sam" | ⚠️ | One-click install; Python 3.14 risk |
 | Proactive audio (ignores speech not aimed at it) | ✅ | Auto-disabled if the server rejects it |
 | Local engine: Whisper + Ollama/LM Studio/OpenAI-compatible + Piper/System/ElevenLabs | ✅ | ⚙ → ENGINE & PROVIDERS |
 | One-shot model ladder with cooldowns | ✅ | `core/gemini.py` |
@@ -190,7 +190,7 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 | `flight_finder` | ✅ | Scrapes Google Flights via the browser |
 | `game_updater` | ✅ | Steam and Epic: list, update, install, schedule |
 | `desktop_control` | ✅ | Wallpaper, organise or clean the desktop |
-| Inline: `system_status`, `screen_process` (screen/webcam vision), `close_camera`, `manage_monitor`, `save_memory`, `recall_memory`, `undo`, `shutdown_jarvis` | ✅ | |
+| Inline: `system_status`, `screen_process` (screen/webcam vision), `close_camera`, `manage_monitor`, `save_memory`, `recall_memory`, `undo`, `shutdown_sam` | ✅ | |
 
 ### Proactive and background
 | Feature | Status |
@@ -209,7 +209,7 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 | Audio device picker with mic test | ✅ |
 | Plugin manager and plugin settings panels | ✅ (but there are no plugins to manage) |
 | Clipboard quick actions | ✅ (M9) |
-| Auto-start with Windows (`HKCU\…\Run\JARVIS_AI`) | ✅ |
+| Auto-start with Windows (`HKCU\…\Run\SAM_AI`) | ✅ |
 | Phone dashboard (QR pairing) | ✅ (H2) |
 
 ### Advertised but missing (H1)
@@ -231,7 +231,7 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 ## 4. Recommended fix order
 1. **Fix `.gitignore` (C1)** before any `git add`, and before you create your own repo.
 2. **Make memory writes atomic (C2).**
-3. Decide on the plugins (H1): ask the author for them, rebuild the ones you need (WhatsApp, Gmail, reminders UI), or remove the references.
+3. Decide on the plugins (H1): rebuild the ones you need (WhatsApp, Gmail, reminders UI), or remove the references.
 4. Switch the venv to Python 3.12 or 3.13 (H4).
 5. Gate the dashboard behind a setting (H2).
 6. Fix the `1007` check (M1) and the weather tool (M6).
@@ -259,7 +259,7 @@ Fixed `time.sleep()` gaps followed by `pyautogui` keys. On a slow machine or wit
 | M8 | Noisy routines | ✅ Fixed | 30-min check-in, 2-hourly news 08–22, quiet hours 23–07 |
 | M9 | Clipboard panel shows copied text | ⏳ Open | |
 | L1 | Hard-coded "Sir" | ✅ Fixed | 56 strings neutralised |
-| L2 | Dead MARK XL modules | ✅ Removed | |
+| L2 | Dead legacy modules | ✅ Removed | |
 | L3 | Unused crypto-js | ✅ Removed | |
 | L5 | `"JARVI    S"` typo | ✅ Fixed | Now `"SAM"` |
 | L9 | README errors | ✅ Fixed | New README; original kept in `docs/` |

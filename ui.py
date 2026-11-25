@@ -1,7 +1,7 @@
 """ui.py — the entry point to the HUD.
 
-Mark LVII moved the implementation into the gui/ package. This file keeps
-JarvisUI — the object main.py builds and every plugin receives as `player` —
+SAM moved the implementation into the gui/ package. This file keeps
+SamUI — the object main.py builds and every plugin receives as `player` —
 and re-exports every name ui.py has ever defined, so `from ui import X`
 written against an older Mark still finds X here.
 """
@@ -97,7 +97,7 @@ def _apply_ui_scale() -> None:
         os.environ["QT_SCALE_FACTOR"] = f"{scale:.2f}"
 
 
-class JarvisUI:
+class SamUI:
     def __init__(self, face_path: str, size=None):
         _apply_ui_scale()
         self._app = QApplication.instance() or QApplication(sys.argv)

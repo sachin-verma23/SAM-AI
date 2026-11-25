@@ -88,7 +88,7 @@ def _sample(schema: dict) -> dict:
 
 
 class Player:
-    """Stands in for JarvisUI. Records every call; every method is safe to call
+    """Stands in for SamUI. Records every call; every method is safe to call
     from any thread, as the real ones are."""
 
     def __init__(self):
@@ -118,7 +118,7 @@ def main() -> None:
     # this thread, model calls stubbed. Any other project gets neither — its
     # own `core` package, if it has one, is not ours to import.
     app = None
-    if SPEC.get("profile") == "jarvis":
+    if SPEC.get("profile") == "sam":
         try:
             from PyQt6.QtCore import qInstallMessageHandler
             from PyQt6.QtWidgets import QApplication

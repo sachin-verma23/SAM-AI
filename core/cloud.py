@@ -90,14 +90,14 @@ from core.routines.rules import hhmm as _hhmm
 
 BASE_DIR = Path(__file__).resolve().parent.parent
 
-SCHEME = "jarvis-cloud"
+SCHEME = "sam-cloud"
 DEFAULT_PORT = 7443
 API_VERSION = "v1"
 POLL_SECONDS = 25
 MAX_BODY = 12_000_000
 
-INSTALL_DIR = Path("/opt/jarvis-cloud")
-SERVICE_USER = "jarvis"
+INSTALL_DIR = Path("/opt/sam-cloud")
+SERVICE_USER = "sam"
 STATE_DIR = BASE_DIR / "cloud_state"
 WORKSPACE = BASE_DIR / "workspace"
 
@@ -272,7 +272,7 @@ class LinkError(RuntimeError):
 def _network_sentence(host: str, port: int, exc: Exception) -> str:
     text = str(exc).lower()
     if "refused" in text:
-        return (f"{host}:{port} refused the connection — is jarvis-cloud running, and is "
+        return (f"{host}:{port} refused the connection — is sam-cloud running, and is "
                 f"port {port} open in the server's firewall?")
     if "timed out" in text or isinstance(exc, socket.timeout):
         return (f"Nothing answered at {host}:{port}. Check the address, and open TCP port "
@@ -405,7 +405,7 @@ def send_wake(cfg: dict) -> str:
     cfg = cfg or {}
     url = str(cfg.get("wake_url") or "").strip()
     if url:
-        req = urllib.request.Request(url, headers={"User-Agent": "jarvis-cloud-wake"})
+        req = urllib.request.Request(url, headers={"User-Agent": "sam-cloud-wake"})
         try:
             with urllib.request.urlopen(req, timeout=15) as resp:
                 code = resp.status
@@ -578,7 +578,7 @@ def weather_today(city: str) -> dict:
     import urllib.request
 
     def get(url):
-        req = urllib.request.Request(url, headers={"User-Agent": "jarvis-cloud"})
+        req = urllib.request.Request(url, headers={"User-Agent": "sam-cloud"})
         with urllib.request.urlopen(req, timeout=12) as resp:
             return json.loads(resp.read().decode("utf-8"))
 
@@ -1142,7 +1142,7 @@ def _inside(root: Path, rel: str) -> Path:
     root = root.resolve()
     given = Path(str(rel or ""))
     # Absolute is fine when it lands inside — that is how telegram_remote names
-    # a file the phone sent: "[FILE] /opt/jarvis-cloud/workspace/inbox/x.pdf".
+    # a file the phone sent: "[FILE] /opt/sam-cloud/workspace/inbox/x.pdf".
     target = (given if given.is_absolute() else root / given).resolve()
     if target != root and root not in target.parents:
         raise PermissionError("that path is outside the workspace")
@@ -1776,7 +1776,7 @@ def serve(runtime, host: str, port: int, cert: Path, key: Path):
             pass                    # scanners and half-open sockets are the weather here
 
     class Handler(BaseHTTPRequestHandler):
-        server_version, sys_version = "jarvis-cloud", ""
+        server_version, sys_version = "sam-cloud", ""
 
         def setup(self):
             self.request.settimeout(70)
@@ -2494,7 +2494,7 @@ class Runtime:
 
     def hello(self) -> dict:
         from core import gemini
-        return {"server": "jarvis-cloud", "name": _assistant_name(), "host": platform.node(),
+        return {"server": "sam-cloud", "name": _assistant_name(), "host": platform.node(),
                 "desktop_online": self.state.desktop_online(),
                 "telegram_configured": self.telegram.configured(),
                 "telegram_running": self.telegram.running(),
@@ -2754,7 +2754,7 @@ def install(port: int, host: str) -> None:
 
     _say("▶ Service user")
     if _sh("id", SERVICE_USER, check=False, capture_output=True).returncode:
-        _sh("useradd", "--system", "--create-home", "--home-dir", "/var/lib/jarvis",
+        _sh("useradd", "--system", "--create-home", "--home-dir", "/var/lib/sam",
             "--shell", "/usr/sbin/nologin", SERVICE_USER)
 
     _say("▶ Code")
@@ -2815,10 +2815,10 @@ def install(port: int, host: str) -> None:
                            "or a package from REQUIREMENTS.")
 
     _say("▶ Service")
-    Path("/etc/systemd/system/jarvis-cloud.service").write_text(_UNIT.format(user=SERVICE_USER, dest=dest))
+    Path("/etc/systemd/system/sam-cloud.service").write_text(_UNIT.format(user=SERVICE_USER, dest=dest))
     _sh("systemctl", "daemon-reload")
-    _sh("systemctl", "enable", "jarvis-cloud", capture_output=True)
-    _sh("systemctl", "restart", "jarvis-cloud")
+    _sh("systemctl", "enable", "sam-cloud", capture_output=True)
+    _sh("systemctl", "restart", "sam-cloud")
 
     _say("▶ Firewall")
     _sh("ufw", "allow", "OpenSSH", capture_output=True)
@@ -2826,10 +2826,10 @@ def install(port: int, host: str) -> None:
     _sh("ufw", "--force", "enable", capture_output=True)
 
     time.sleep(2)
-    _sh("systemctl", "--no-pager", "--lines=5", "status", "jarvis-cloud", check=False)
+    _sh("systemctl", "--no-pager", "--lines=5", "status", "sam-cloud", check=False)
     _as_service(dest, "--pair-code")
     _say(f"If your VPS provider has a firewall panel, allow TCP {port} there too.\n"
-         f"Logs:  journalctl -u jarvis-cloud -f")
+         f"Logs:  journalctl -u sam-cloud -f")
 
 
 def deploy(target: str, port: int, host: str, ssh_port: int, key: str = "") -> None:
@@ -2872,18 +2872,18 @@ def deploy(target: str, port: int, host: str, ssh_port: int, key: str = "") -> N
         raise SystemExit("These files are missing from this SAM folder, so nothing was uploaded:\n  "
                          + "\n  ".join(missing))
     with tempfile.TemporaryDirectory() as tmp:
-        bundle = Path(tmp) / "jarvis-cloud.tgz"
+        bundle = Path(tmp) / "sam-cloud.tgz"
         with tarfile.open(bundle, "w:gz") as tar:
             for rel in MANIFEST:
                 data = (BASE_DIR / rel).read_bytes().replace(b"\r\n", b"\n")
-                info = tarfile.TarInfo(f"jarvis-src/{rel}")
+                info = tarfile.TarInfo(f"sam-src/{rel}")
                 info.size = len(data)
                 tar.addfile(info, io.BytesIO(data))
         _say(f"▶ Uploading {len(MANIFEST)} files to {target}")
-        _sh("scp", "-P", str(ssh_port), *opts, str(bundle), f"{target}:/tmp/jarvis-cloud.tgz")
+        _sh("scp", "-P", str(ssh_port), *opts, str(bundle), f"{target}:/tmp/sam-cloud.tgz")
     args = f"install --port {int(port)}" + (f" --host {host}" if host else "")
-    remote = ("set -e; rm -rf ~/jarvis-src; tar xzf /tmp/jarvis-cloud.tgz -C ~; "
-              "rm -f /tmp/jarvis-cloud.tgz; cd ~/jarvis-src; "
+    remote = ("set -e; rm -rf ~/sam-src; tar xzf /tmp/sam-cloud.tgz -C ~; "
+              "rm -f /tmp/sam-cloud.tgz; cd ~/sam-src; "
               "command -v python3 >/dev/null || (apt-get update -q && apt-get install -y -q python3); "
               f"if [ \"$(id -u)\" -eq 0 ]; then python3 -m core.cloud {args}; "
               f"else sudo python3 -m core.cloud {args}; fi")

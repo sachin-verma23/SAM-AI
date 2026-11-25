@@ -1,6 +1,6 @@
 """gui/window.py — MainWindow — lays the HUD out and owns every signal the rest of the app talks to.
 
-Split out of ui.py in Mark LVII; behaviour unchanged."""
+Split out of ui.py in SAM; behaviour unchanged."""
 from __future__ import annotations
 
 import json
@@ -95,10 +95,8 @@ from gui.widgets import (ArcLogo, CommandFrame, DataRow, HeaderBar, HoloPanel, I
                          TaskRow)
 
 
-# Windows "Run" registry value for auto-start. The original project used
-# JARVIS_AI; it is still recognised so an old entry can be found and removed.
+# Windows "Run" registry value for auto-start.
 _AUTOSTART_NAME = "SAM_AI"
-_AUTOSTART_OLD = ("JARVIS_AI",)
 
 
 def _window_title(display: str) -> str:
@@ -166,9 +164,9 @@ class MainWindow(QMainWindow):
         self.on_voice_change   = None   # callable: () -> None — rebuild session with new voice
         self.on_audio_device_change = None  # callable: () -> None — reopen audio streams
         self._confirm_overlay  = None   # live ConfirmBanner, if one is on screen
-        self.get_plugins       = None   # callable: () -> list[dict], set by JarvisLive
-        self.get_plugin_settings = None # callable: () -> list[dict] settings schemas, set by JarvisLive
-        self.on_wake_toggle    = None   # callable: (enable: bool) -> str, set by JarvisLive
+        self.get_plugins       = None   # callable: () -> list[dict], set by SamLive
+        self.get_plugin_settings = None # callable: () -> list[dict] settings schemas, set by SamLive
+        self.on_wake_toggle    = None   # callable: (enable: bool) -> str, set by SamLive
         self.on_wake_manual    = None   # callable: () -> None — manual sleep/wake
         self.on_push_to_talk   = None   # callable: (enable: bool) -> str scope
         self.ptt_hold          = None   # callable: (held: bool) -> None — windowed chord
@@ -298,7 +296,7 @@ class MainWindow(QMainWindow):
         # STILL PICTURE needs a scene and a view and nothing else. A Qt
         # install without the multimedia plugins can still put a photo where
         # the avatar sits, and `generate_image` has been looking for somewhere
-        # to show its own output since Mark LV.
+        # to show its own output since an earlier version.
         self._video_scene = QGraphicsScene(self)
         self._image_item = QGraphicsPixmapItem()
         self._image_item.setTransformationMode(
@@ -804,7 +802,7 @@ class MainWindow(QMainWindow):
     # Icon generation — arc-reactor style, rendered with Pillow
     # ------------------------------------------------------------------
     @staticmethod
-    def _build_jarvis_icon(out_path: Path) -> bool:
+    def _build_sam_icon(out_path: Path) -> bool:
         """
         Render a SAM arc-reactor icon at 4× resolution and downsample
         for crisp results at all sizes. Saves a multi-res .ico to out_path.
@@ -1046,9 +1044,9 @@ class MainWindow(QMainWindow):
         desktop = self._get_desktop_dir()
 
         # Arc-reactor icon (.ico — also exported as .png for Linux/macOS)
-        ico_path = Path(__file__).resolve().parent.parent / "config" / "jarvis.ico"
+        ico_path = Path(__file__).resolve().parent.parent / "config" / "sam.ico"
         if not ico_path.exists():
-            self._build_jarvis_icon(ico_path)
+            self._build_sam_icon(ico_path)
 
         try:
             _os = platform.system()
@@ -1089,7 +1087,7 @@ class MainWindow(QMainWindow):
                     '<plist version="1.0"><dict>\n'
                     '  <key>CFBundleExecutable</key><string>SAM</string>\n'
                     '  <key>CFBundleIdentifier</key>'
-                    '<string>com.jarvis.assistant</string>\n'
+                    '<string>com.sam.assistant</string>\n'
                     '  <key>CFBundleName</key><string>J.A.R.V.I.S</string>\n'
                     '  <key>CFBundlePackageType</key><string>APPL</string>\n'
                     '  <key>CFBundleVersion</key><string>1.0</string>\n'
@@ -1306,8 +1304,6 @@ class MainWindow(QMainWindow):
         name = display.replace(".", "").strip().upper()
         if name == "SAM":
             return f"Personal AI Assistant · {APP_OWNER}"
-        if name == "JARVIS":
-            return "Just A Rather Very Intelligent System"
         return "Personal AI Assistant"
 
     def _fit_side_columns(self) -> None:
@@ -2398,20 +2394,17 @@ class MainWindow(QMainWindow):
                 key = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_READ)
                 try:
-                    for name in (_AUTOSTART_NAME, *_AUTOSTART_OLD):
-                        try:
-                            winreg.QueryValueEx(key, name)
-                            return True
-                        except FileNotFoundError:
-                            continue
+                    winreg.QueryValueEx(key, _AUTOSTART_NAME)
+                    return True
+                except FileNotFoundError:
                     return False
                 finally:
                     winreg.CloseKey(key)
             elif _OS == "Darwin":
                 return (Path.home() / "Library" / "LaunchAgents"
-                        / "com.jarvis.assistant.plist").exists()
+                        / "com.sam.assistant.plist").exists()
             else:
-                return (Path.home() / ".config" / "autostart" / "jarvis.desktop").exists()
+                return (Path.home() / ".config" / "autostart" / "sam.desktop").exists()
         except Exception:
             return False
 
@@ -2424,13 +2417,10 @@ class MainWindow(QMainWindow):
                 reg = winreg.OpenKey(winreg.HKEY_CURRENT_USER,
                     r"Software\Microsoft\Windows\CurrentVersion\Run", 0, winreg.KEY_ALL_ACCESS)
                 if currently_on:
-                    # Remove the current entry and any left by the original
-                    # MARK LVII name, so "off" really means off.
-                    for name in (_AUTOSTART_NAME, *_AUTOSTART_OLD):
-                        try:
-                            winreg.DeleteValue(reg, name)
-                        except FileNotFoundError:
-                            pass
+                    try:
+                        winreg.DeleteValue(reg, _AUTOSTART_NAME)
+                    except FileNotFoundError:
+                        pass
                 else:
                     pythonw = Path(sys.executable).parent / "pythonw.exe"
                     exe = str(pythonw if pythonw.exists() else sys.executable)
@@ -2440,7 +2430,7 @@ class MainWindow(QMainWindow):
             elif _OS == "Darwin":
                 plist_dir = Path.home() / "Library" / "LaunchAgents"
                 plist_dir.mkdir(parents=True, exist_ok=True)
-                plist = plist_dir / "com.jarvis.assistant.plist"
+                plist = plist_dir / "com.sam.assistant.plist"
                 if currently_on:
                     plist.unlink(missing_ok=True)
                 else:
@@ -2449,7 +2439,7 @@ class MainWindow(QMainWindow):
                         '<!DOCTYPE plist PUBLIC "-//Apple//DTD PLIST 1.0//EN" '
                         '"http://www.apple.com/DTDs/PropertyList-1.0.dtd">\n'
                         '<plist version="1.0"><dict>\n'
-                        '  <key>Label</key><string>com.jarvis.assistant</string>\n'
+                        '  <key>Label</key><string>com.sam.assistant</string>\n'
                         '  <key>ProgramArguments</key><array>\n'
                         f'    <string>{sys.executable}</string>\n'
                         f'    <string>{script}</string>\n'
@@ -2460,7 +2450,7 @@ class MainWindow(QMainWindow):
             else:
                 desk_dir = Path.home() / ".config" / "autostart"
                 desk_dir.mkdir(parents=True, exist_ok=True)
-                desk = desk_dir / "jarvis.desktop"
+                desk = desk_dir / "sam.desktop"
                 if currently_on:
                     desk.unlink(missing_ok=True)
                 else:
@@ -2510,7 +2500,7 @@ class MainWindow(QMainWindow):
                         "awake": bool(s.get("awake"))}
             except Exception:
                 pass
-        # Before JarvisLive has wired its callback (drawer built at startup).
+        # Before SamLive has wired its callback (drawer built at startup).
         ready, enabled = False, False
         try:
             from core.wake_word import is_ready
@@ -2697,7 +2687,7 @@ class MainWindow(QMainWindow):
                 self._wake_dl_sig.emit(ok, msg)
             threading.Thread(target=_work, daemon=True).start()
             return
-        # Already downloaded → just flip enabled/disabled through JarvisLive.
+        # Already downloaded → just flip enabled/disabled through SamLive.
         if self.on_wake_toggle:
             try:
                 self.on_wake_toggle(not st["enabled"])

@@ -78,7 +78,7 @@ SLIM: list[dict] = [
      "parameters": {"type": "OBJECT", "properties": {
          "action": {"type": "STRING"}, "value": {"type": "STRING"}},
          "required": ["action"]}},
-    {"name": "shutdown_jarvis",
+    {"name": "shutdown_sam",
      "description": "Close SAM itself when the user says goodbye or asks it to stop.",
      "parameters": {"type": "OBJECT", "properties": {}}},
 ]

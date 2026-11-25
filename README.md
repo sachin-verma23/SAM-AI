@@ -5,7 +5,7 @@
 
 SAM is a personal voice assistant for the desktop. It hears you (Hindi, English or Hinglish), answers out loud, controls your PC by voice, remembers what matters to you, and works both online (Google Gemini Live) and offline (Ollama + Whisper + Piper).
 
-> SAM is built on **[MARK LVII](https://github.com/FatihMakes/Mark-LVII) by FatihMakes** and keeps its licence, **CC BY-NC 4.0**: personal and non-commercial use only. The original README is kept in [docs/MARK-LVII-README.md](docs/MARK-LVII-README.md).
+> Licence: **CC BY-NC 4.0** — personal and non-commercial use only. See [LICENSE](LICENSE) and [NOTICE](NOTICE).
 
 ---
 
@@ -63,4 +63,4 @@ Everything stays on your PC: settings and keys in `config/api_keys.json`, memory
 
 ## Licence
 
-CC BY-NC 4.0, inherited from MARK LVII by FatihMakes. See [LICENSE](LICENSE).
+CC BY-NC 4.0. See [LICENSE](LICENSE) and [NOTICE](NOTICE).

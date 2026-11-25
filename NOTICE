@@ -1,0 +1,16 @@
+SAM — Personal AI Assistant
+Copyright (c) 2026 Sachin Verma
+
+SAM is an adapted work. It is based on "Mark LVII" by FatihMakes
+(https://github.com/FatihMakes/Mark-LVII), licensed under the Creative Commons
+Attribution-NonCommercial 4.0 International licence (CC BY-NC 4.0). That
+licence, reproduced in LICENSE, applies to SAM as a whole.
+
+Changes made by Sachin Verma include: renaming and rebranding, offline mode
+(local speech recognition, language model and voice) with automatic
+online/offline switching, Hindi/English/Hinglish replies, the "Hey Sam" wake
+word, webcam hand-gesture control, on-screen confirmation for sensitive
+actions, editable memory and conversation history, and HUD status indicators.
+
+Third-party asset: core/face_model.obj — MediaPipe canonical face model,
+Apache License 2.0.

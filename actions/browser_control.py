@@ -26,7 +26,7 @@ from core import appidentity, outcome
 #     was never offered a browser tool it could not serve. Deferring the import
 #     without keeping that would declare `browser_control` on a machine that
 #     cannot run it — the model would call it, get an exception, and describe a
-#     page it never opened. Exactly the failure mode this project spent Mark LVI
+#     page it never opened. Exactly the failure mode this project spent an earlier version
 #     removing from local engines.
 #
 #     So the check stays at module scope and still stops the module loading; it
@@ -175,7 +175,7 @@ def _real_profile_dir(browser: str) -> str:
             print(f"[Browser] ✅ Real profile found for {browser}: {p}")
             return str(p)
 
-    fallback = home / ".jarvis_profiles" / browser
+    fallback = home / ".sam_profiles" / browser
     fallback.mkdir(parents=True, exist_ok=True)
     print(f"[Browser] ⚠️  Real profile not found for {browser}, using: {fallback}")
     return str(fallback)
@@ -696,7 +696,7 @@ class _BrowserSession:
 
         if engine_name == "firefox":
             profile = _firefox_profile_dir() or str(
-                Path.home() / ".jarvis_profiles" / "firefox"
+                Path.home() / ".sam_profiles" / "firefox"
             )
             kwargs: dict = {
                 "headless":    False,
@@ -711,16 +711,16 @@ class _BrowserSession:
                 self._context = await engine_obj.launch_persistent_context(profile, **kwargs)
             except Exception as e:
                 print(f"[Browser] Firefox real profile failed ({e}), using SAM profile")
-                jarvis = str(Path.home() / ".jarvis_profiles" / "firefox_jarvis")
-                Path(jarvis).mkdir(parents=True, exist_ok=True)
-                self._context = await engine_obj.launch_persistent_context(jarvis, **kwargs)
+                sam = str(Path.home() / ".sam_profiles" / "firefox_sam")
+                Path(sam).mkdir(parents=True, exist_ok=True)
+                self._context = await engine_obj.launch_persistent_context(sam, **kwargs)
 
             self._page = await self._adopt_page()
             print(f"[Browser] ✅ Firefox launched")
             return
 
         if engine_name == "webkit":
-            safari_profile = str(Path.home() / ".jarvis_profiles" / "safari")
+            safari_profile = str(Path.home() / ".sam_profiles" / "safari")
             Path(safari_profile).mkdir(parents=True, exist_ok=True)
             kwargs = {
                 "headless":    False,
@@ -795,12 +795,12 @@ class _BrowserSession:
         # profile / newer Chrome versions block the real profile under
         # automation). Fall back to a persistent SAM automation profile —
         # accounts logged in here once stay logged in on later sessions too.
-        jarvis_profile = str(Path.home() / ".jarvis_profiles" / self.browser_name)
-        Path(jarvis_profile).mkdir(parents=True, exist_ok=True)
-        print(f"[Browser] Retrying with SAM profile: {jarvis_profile}")
+        sam_profile = str(Path.home() / ".sam_profiles" / self.browser_name)
+        Path(sam_profile).mkdir(parents=True, exist_ok=True)
+        print(f"[Browser] Retrying with SAM profile: {sam_profile}")
 
         try:
-            self._context = await engine_obj.launch_persistent_context(jarvis_profile, **kwargs)
+            self._context = await engine_obj.launch_persistent_context(sam_profile, **kwargs)
             self._page = await self._adopt_page()
             self.profile_kind = "separate"
             print(f"[Browser] ✅ Launched [{label}] with SAM profile "
@@ -1021,7 +1021,7 @@ class _BrowserSession:
     async def screenshot(self, path: str = None) -> str:
         page = await self._get_page()
         try:
-            save_path = path or str(Path.home() / "Desktop" / "jarvis_screenshot.png")
+            save_path = path or str(Path.home() / "Desktop" / "sam_screenshot.png")
             await page.screenshot(path=save_path, full_page=False)
             return f"Screenshot saved: {save_path}"
         except Exception as e:

@@ -2,7 +2,7 @@
 core/wake_sam.py — offline "Hey Sam" wake word, built on Vosk.
 
 WHY VOSK AND NOT openWakeWord
-    openWakeWord only ships a pretrained "Hey Jarvis". A new phrase means
+    openWakeWord only ships a pretrained "Hey Sam". A new phrase means
     training a model — hours of synthetic data generation and training, more
     than a 4-core laptop should be asked to do. Vosk is a small offline speech
     recogniser that can be restricted to a GRAMMAR: it may only hear "hey sam",

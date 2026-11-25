@@ -1,6 +1,6 @@
 """core/routines — things the assistant does on its own, when a moment arrives.
 
-Before Mark LVII the same idea was written four times, each by hand: a morning
+Before SAM the same idea was written four times, each by hand: a morning
 briefing fired at connect, a proactive check-in on a fifteen-minute timer, a
 news watch on a thirty-minute loop, and reminders that were only ever an
 operating-system notification. A routine is the shape they share:

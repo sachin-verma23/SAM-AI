@@ -1,5 +1,5 @@
 """
-SAM — one-time setup (based on MARK LVII).
+SAM — one-time setup.
 
 Installs the Python dependencies for THIS operating system only: the OS-specific
 packages in requirements.txt carry `sys_platform` markers, so a macOS or Linux

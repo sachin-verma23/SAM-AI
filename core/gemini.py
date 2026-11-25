@@ -155,7 +155,7 @@ PROVIDER_PREFIX = "prov:"
 # real quota when they are healthy, and a rung that is down is set aside by the
 # cooldown after one attempt instead of being paid for on every call.
 #
-# Re-measured for Mark LVII (2026-09-15), same key:
+# Re-measured for SAM (2026-09-15), same key:
 #     gemini-2.5-flash / -lite   404 "no longer available to new users"
 #     gemini-3.5-flash-lite      0.56s      gemini-flash-lite-latest  0.59s
 #     gemini-3.6-flash           2.52s, then a 504 after 19s

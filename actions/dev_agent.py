@@ -17,7 +17,7 @@ def get_base_dir():
 
 BASE_DIR         = get_base_dir()
 API_CONFIG_PATH  = BASE_DIR / "config" / "api_keys.json"
-PROJECTS_DIR     = Path.home() / "Desktop" / "JarvisProjects"
+PROJECTS_DIR     = Path.home() / "Desktop" / "SamProjects"
 MAX_FIX_ATTEMPTS = 5
 # Model choice, timeout and fallback ladder all live in core/gemini.py.
 from core import gemini
@@ -499,7 +499,7 @@ def _build_project(
         if speak: speak(msg)
         return msg
 
-    proj_name    = project_name or plan.get("project_name", "jarvis_project")
+    proj_name    = project_name or plan.get("project_name", "sam_project")
     proj_name    = re.sub(r"[^\w\-]", "_", proj_name)
     project_dir  = PROJECTS_DIR / proj_name
     project_dir.mkdir(parents=True, exist_ok=True)
@@ -662,14 +662,14 @@ def _build_project(
 #   built off the Qt thread, a separate window instead of the quiz board.
 #
 # WHAT MAKES IT SAFE TO SAY YES TO
-#   Every file is copied to .jarvis_backup/<time>/ inside the folder before it
+#   Every file is copied to .sam_backup/<time>/ inside the folder before it
 #   is changed, and the whole job is one entry on the shared undo stack: "undo"
 #   puts every file back and removes the ones it created.
 
 _SKIP_DIRS = {".git", ".hg", ".svn", "node_modules", "venv", ".venv", "env",
               "__pycache__", ".mypy_cache", ".pytest_cache", "dist", "build",
-              ".idea", ".vscode", ".next", "target", ".jarvis_backup"}
-_BACKUP_DIR     = ".jarvis_backup"
+              ".idea", ".vscode", ".next", "target", ".sam_backup"}
+_BACKUP_DIR     = ".sam_backup"
 _MAX_FILE_CHARS = 120_000     # bigger than this is generated or data, not code
 _CONTEXT_CHARS  = 350_000     # file text sent to plan; MiniMax M3.1 takes 512K tokens
 _MAX_TREE       = 1500        # paths listed for the model

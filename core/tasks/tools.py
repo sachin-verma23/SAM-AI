@@ -9,7 +9,7 @@ THE RULES
     Nothing that acts on the computer or on the world. No opening applications,
     typing, sending messages, moving files outside the task's own folder. A
     profile that names such a tool does not get it — the tool simply is not in
-    this file. (Mark LVIII's approval policy is where acting tools will come
+    this file. (a future version's approval policy is where acting tools will come
     back, behind a button a person presses.)
 
     The web and private memory are never in the same agent. An agent that can

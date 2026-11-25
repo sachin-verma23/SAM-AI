@@ -436,7 +436,7 @@ class View:
     #     Reading the foreground window is right for ACTING: that is where a
     #     click lands. It is wrong for CHECKING, and the difference cost a whole
     #     task. A browser was asked to open a profile page, it opened it
-    #     perfectly, and the check "a window titled fatihmakes exists" was put
+    #     perfectly, and the check "a window titled sachin exists" was put
     #     to the assistant's own window because that was the one in front. The
     #     answer was no, three times, and the browser was launched again after
     #     each one.

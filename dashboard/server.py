@@ -391,7 +391,7 @@ def _ensure_network_access(*ports: int) -> None:
                   "dashboard unreachable, and nothing else is affected.")
 
         bat_body = "\r\n".join(bat_lines) + "\r\n"
-        fd, bat_path = tempfile.mkstemp(suffix=".bat", prefix="jarvis_fw_")
+        fd, bat_path = tempfile.mkstemp(suffix=".bat", prefix="sam_fw_")
         try:
             os.write(fd, bat_body.encode("mbcs"))   # Windows cmd.exe expects ANSI
             os.close(fd)
@@ -605,8 +605,8 @@ def _ensure_certs() -> bool:
     plain HTTP, which still works — the QR code simply encodes http:// instead.
     """
     certs = BASE_DIR / "config" / "certs"
-    key_p = certs / "jarvis.key"
-    crt_p = certs / "jarvis.crt"
+    key_p = certs / "sam.key"
+    crt_p = certs / "sam.crt"
     if key_p.exists() and crt_p.exists():
         return True
 
@@ -802,7 +802,7 @@ class DashboardServer:
         except Exception:
             return False
         certs = BASE_DIR / "config" / "certs"
-        return (certs / "jarvis.key").exists() and (certs / "jarvis.crt").exists()
+        return (certs / "sam.key").exists() and (certs / "sam.crt").exists()
 
     def get_url(self) -> str:
         """The full URL the QR code carries — always with its scheme, so a
@@ -972,9 +972,9 @@ class DashboardServer:
 </style></head>
 <body>
 <script>
-  sessionStorage.setItem('jarvis_token','{tok}');
-  sessionStorage.setItem('jarvis_key','{key}');
-  localStorage.setItem('jarvis_device_token','{dev_tok}');
+  sessionStorage.setItem('sam_token','{tok}');
+  sessionStorage.setItem('sam_key','{key}');
+  localStorage.setItem('sam_device_token','{dev_tok}');
   setTimeout(function(){{location.replace('/')}},400);
 </script>
 <p>Connecting to SAM…</p>
@@ -1262,8 +1262,8 @@ class DashboardServer:
             pass
 
         use_ssl  = self._ssl_enabled()
-        ssl_key  = BASE_DIR / "config" / "certs" / "jarvis.key"
-        ssl_cert = BASE_DIR / "config" / "certs" / "jarvis.crt"
+        ssl_key  = BASE_DIR / "config" / "certs" / "sam.key"
+        ssl_cert = BASE_DIR / "config" / "certs" / "sam.crt"
 
         # TLS IS WANTED, BUT NOT AT THE COST OF NOT STARTING.
         #

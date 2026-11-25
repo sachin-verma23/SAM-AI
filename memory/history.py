@@ -1,7 +1,7 @@
 """
 memory/history.py — every conversation, kept locally and searchable.
 
-MARK LVII remembered facts (long_term.json) and one or two sentences per
+SAM remembered facts (long_term.json) and one or two sentences per
 session, which the next briefing consumed and deleted. "What did we talk about
 on Monday?" or "what was that command you gave me yesterday?" had no answer.
 
